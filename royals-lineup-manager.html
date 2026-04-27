@@ -1,0 +1,2513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Lineup Manager — MLB Edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root {
+    --royal-blue: #004687;
+    --dark-blue: #002B5C;
+    --deep-navy: #001a3d;
+    --gold: #BD9B60;
+    --gold-bright: #D4B97F;
+    --gold-deep: #8a6f3d;
+    --cream: #F5EFE0;
+    --cream-dark: #ebe3d0;
+    --white: #FFFFFF;
+    --red: #C8102E;
+    --ink: #1a1a1a;
+    --gray: #6b7280;
+    --gray-light: #d1d5db;
+    --shadow-lg: 0 12px 32px rgba(0, 43, 92, 0.18);
+    --shadow-md: 0 4px 12px rgba(0, 43, 92, 0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    font-family: 'Inter', sans-serif;
+    background: var(--cream);
+    color: var(--dark-blue);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Subtle vintage texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 50%, rgba(189, 155, 96, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 70, 135, 0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    background: linear-gradient(180deg, var(--royal-blue) 0%, var(--dark-blue) 100%);
+    color: var(--white);
+    padding: 24px 20px 22px;
+    position: relative;
+    border-bottom: 4px solid var(--gold);
+    box-shadow: var(--shadow-md);
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -4px;
+    height: 4px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--gold) 0 18px,
+      var(--gold-bright) 18px 36px
+    );
+  }
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .brand-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--white);
+    padding: 6px 14px 6px 6px;
+    border-radius: 100px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+    text-align: left;
+  }
+  .brand-btn:hover { background: rgba(255,255,255,0.12); }
+  .brand-mark {
+    width: 44px; height: 44px;
+    background: var(--gold);
+    color: var(--dark-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue';
+    font-size: 18px;
+    letter-spacing: 1px;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.15);
+    flex-shrink: 0;
+  }
+  .brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    min-width: 0;
+  }
+  .brand-text .small {
+    font-family: 'Inter';
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    color: var(--gold-bright);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+  .brand-text .big {
+    font-family: 'Bebas Neue';
+    font-size: 20px;
+    letter-spacing: 1.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+  .brand-chev {
+    font-size: 14px;
+    color: var(--gold-bright);
+    margin-left: 2px;
+    opacity: 0.7;
+  }
+  .header-back {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--white);
+    padding: 8px 14px;
+    border-radius: 100px;
+    font-family: 'Inter';
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: background 0.15s;
+  }
+  .header-back:hover { background: rgba(255,255,255,0.18); }
+
+  /* ===== MAIN ===== */
+  .main {
+    flex: 1;
+    padding: 24px 20px 100px;
+  }
+
+  /* ===== SECTION HEADERS ===== */
+  .section-label {
+    font-family: 'Bebas Neue';
+    font-size: 14px;
+    letter-spacing: 3px;
+    color: var(--gold-deep);
+    margin-bottom: 4px;
+  }
+  .section-title {
+    font-family: 'Bebas Neue';
+    font-size: 38px;
+    line-height: 1;
+    letter-spacing: 1px;
+    color: var(--dark-blue);
+    margin-bottom: 20px;
+  }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--white);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 16px;
+    border: 1px solid rgba(0, 43, 92, 0.06);
+  }
+  .card-title {
+    font-family: 'Bebas Neue';
+    font-size: 22px;
+    letter-spacing: 1.5px;
+    color: var(--dark-blue);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-pill {
+    background: var(--cream);
+    color: var(--dark-blue);
+    font-family: 'Inter';
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    cursor: pointer;
+    font-family: 'Bebas Neue';
+    font-size: 18px;
+    letter-spacing: 2px;
+    padding: 16px 24px;
+    border-radius: 10px;
+    transition: transform 0.1s, box-shadow 0.15s;
+    width: 100%;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.12);
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.12); }
+  .btn-primary {
+    background: linear-gradient(180deg, var(--royal-blue), var(--dark-blue));
+    color: var(--white);
+  }
+  .btn-primary:hover { background: linear-gradient(180deg, #0055a4, var(--royal-blue)); }
+  .btn-gold {
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+    color: var(--dark-blue);
+    border: 1px solid var(--gold-deep);
+  }
+  .btn-gold:hover { background: linear-gradient(180deg, #e0c690, var(--gold-bright)); }
+  .btn-ghost {
+    background: transparent;
+    color: var(--dark-blue);
+    border: 2px solid var(--gold);
+    box-shadow: none;
+  }
+  .btn-ghost:active { transform: translateY(0); }
+  .btn-ghost:hover { background: var(--cream); }
+  .btn-danger {
+    background: var(--red);
+    color: var(--white);
+  }
+  .btn-small {
+    font-size: 13px;
+    padding: 10px 16px;
+    width: auto;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.1);
+  }
+
+  .btn-stack { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+
+  /* ===== INPUTS ===== */
+  .input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .input {
+    flex: 1;
+    padding: 14px 16px;
+    border: 2px solid var(--cream-dark);
+    border-radius: 10px;
+    font-family: 'Inter';
+    font-size: 16px;
+    background: var(--white);
+    color: var(--dark-blue);
+    transition: border-color 0.15s;
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--royal-blue);
+  }
+
+  /* ===== ROSTER PLAYER LIST ===== */
+  .player-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .player-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--cream);
+    border-radius: 10px;
+    border-left: 4px solid var(--gold);
+  }
+  .player-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--dark-blue);
+  }
+  .player-remove {
+    background: none;
+    border: none;
+    color: var(--red);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .player-remove:hover { background: rgba(200, 16, 46, 0.08); }
+
+  /* ===== ATTENDANCE TOGGLES ===== */
+  .att-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: var(--white);
+    border-radius: 10px;
+    border: 2px solid var(--cream-dark);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .att-row.on {
+    border-color: var(--gold);
+    background: linear-gradient(90deg, rgba(189, 155, 96, 0.08), transparent);
+  }
+  .att-row.off { opacity: 0.55; }
+  .att-toggle {
+    width: 48px; height: 28px;
+    background: var(--gray-light);
+    border-radius: 100px;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .att-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 22px; height: 22px;
+    background: var(--white);
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .att-row.on .att-toggle { background: var(--royal-blue); }
+  .att-row.on .att-toggle::after { transform: translateX(20px); }
+  .att-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .att-count {
+    background: var(--royal-blue);
+    color: var(--white);
+    padding: 8px 14px;
+    border-radius: 100px;
+    font-family: 'Bebas Neue';
+    font-size: 18px;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  /* ===== LINEUP DISPLAY ===== */
+  .lineup-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .lineup-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    background: var(--white);
+    border-radius: 10px;
+    border: 1px solid var(--cream-dark);
+    transition: all 0.15s;
+  }
+  .lineup-item.current {
+    border: 2px solid var(--gold);
+    background: linear-gradient(90deg, rgba(189, 155, 96, 0.15), var(--white));
+    box-shadow: 0 4px 12px rgba(189, 155, 96, 0.25);
+  }
+  .lineup-item.upcoming {
+    border-color: var(--royal-blue);
+  }
+  .lineup-item.done {
+    opacity: 0.45;
+  }
+  .lineup-num {
+    width: 40px; height: 40px;
+    background: var(--royal-blue);
+    color: var(--white);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue';
+    font-size: 22px;
+    letter-spacing: 0;
+    flex-shrink: 0;
+    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.18);
+  }
+  .lineup-item.current .lineup-num {
+    background: var(--gold);
+    color: var(--dark-blue);
+  }
+  .lineup-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--dark-blue);
+  }
+  .lineup-tag {
+    font-family: 'Bebas Neue';
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--gold-deep);
+  }
+  .lineup-item.current .lineup-tag { color: var(--royal-blue); }
+
+  /* ===== AT BAT SCOREBOARD ===== */
+  .scoreboard {
+    background: linear-gradient(135deg, var(--dark-blue) 0%, var(--deep-navy) 100%);
+    color: var(--white);
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin-bottom: 18px;
+    position: relative;
+    overflow: hidden;
+    border: 3px solid var(--gold);
+    box-shadow: 0 8px 24px rgba(0, 43, 92, 0.35);
+  }
+  .scoreboard::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 19px, rgba(255,255,255,0.02) 19px 20px),
+      repeating-linear-gradient(90deg, transparent 0 19px, rgba(255,255,255,0.02) 19px 20px);
+    pointer-events: none;
+  }
+  .sb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .sb-label {
+    font-family: 'Bebas Neue';
+    font-size: 14px;
+    letter-spacing: 3px;
+    color: var(--gold-bright);
+  }
+  .sb-inning {
+    font-family: 'Bebas Neue';
+    font-size: 16px;
+    letter-spacing: 2px;
+    background: var(--gold);
+    color: var(--dark-blue);
+    padding: 4px 12px;
+    border-radius: 100px;
+  }
+  .sb-position {
+    text-align: center;
+    margin: 8px 0 14px;
+    position: relative;
+  }
+  .sb-position-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 84px; height: 84px;
+    background: var(--gold);
+    color: var(--dark-blue);
+    border-radius: 50%;
+    font-family: 'Bebas Neue';
+    font-size: 56px;
+    line-height: 1;
+    box-shadow: inset 0 -5px 0 rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.25);
+  }
+  .sb-name {
+    font-family: 'Bebas Neue';
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 6px;
+    word-break: break-word;
+    position: relative;
+  }
+  .sb-meta {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--gold-bright);
+    position: relative;
+  }
+
+  /* On deck / in the hole compact cards */
+  .next-cards {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .next-card {
+    flex: 1;
+    background: var(--white);
+    border-radius: 12px;
+    padding: 14px 12px;
+    border: 1px solid var(--cream-dark);
+    text-align: center;
+  }
+  .next-card.deck { border-left: 4px solid var(--royal-blue); }
+  .next-card.hole { border-left: 4px solid var(--gold); }
+  .next-label {
+    font-family: 'Bebas Neue';
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--gold-deep);
+    margin-bottom: 6px;
+  }
+  .next-name {
+    font-family: 'Bebas Neue';
+    font-size: 20px;
+    letter-spacing: 0.5px;
+    color: var(--dark-blue);
+    line-height: 1.1;
+  }
+
+  /* ===== UTILITY ===== */
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray);
+  }
+  .empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+  .upload-zone {
+    display: block;
+    border: 2px dashed var(--gold);
+    border-radius: 12px;
+    padding: 24px 20px;
+    text-align: center;
+    background: rgba(189, 155, 96, 0.05);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .upload-zone:hover { background: rgba(189, 155, 96, 0.1); }
+  .upload-zone p { font-size: 14px; color: var(--gray); margin-top: 6px; }
+  .upload-zone strong { color: var(--royal-blue); font-weight: 700; }
+
+  .loading {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: var(--white);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error {
+    background: rgba(200, 16, 46, 0.08);
+    color: var(--red);
+    border: 1px solid rgba(200, 16, 46, 0.2);
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+
+  .resume-banner {
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-bright) 100%);
+    color: var(--dark-blue);
+    padding: 16px 18px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-shadow: var(--shadow-md);
+  }
+  .resume-banner-text { flex: 1; }
+  .resume-banner-label {
+    font-family: 'Bebas Neue';
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-bottom: 2px;
+  }
+  .resume-banner-detail {
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .extracted-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+  }
+  .extracted-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--cream);
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+  .extracted-item input[type="text"] {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--dark-blue);
+    padding: 4px;
+  }
+  .extracted-item input[type="text"]:focus {
+    outline: 2px solid var(--royal-blue);
+    border-radius: 4px;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 27, 60, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal {
+    background: var(--white);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 480px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-title {
+    font-family: 'Bebas Neue';
+    font-size: 26px;
+    letter-spacing: 1.5px;
+    color: var(--dark-blue);
+    margin-bottom: 12px;
+  }
+
+  /* ===== SCHEDULE ===== */
+  .sched-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .sched-item {
+    background: var(--cream);
+    border-radius: 12px;
+    padding: 14px 16px;
+    border-left: 4px solid var(--royal-blue);
+    position: relative;
+  }
+  .sched-item.next {
+    background: linear-gradient(135deg, var(--royal-blue), var(--dark-blue));
+    color: var(--white);
+    border-left: 4px solid var(--gold);
+    box-shadow: 0 4px 14px rgba(0, 43, 92, 0.25);
+  }
+  .sched-item.past { opacity: 0.5; border-left-color: var(--gray-light); }
+  .sched-date {
+    font-family: 'Bebas Neue';
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: var(--gold-deep);
+    margin-bottom: 4px;
+  }
+  .sched-item.next .sched-date { color: var(--gold-bright); }
+  .sched-opponent {
+    font-family: 'Bebas Neue';
+    font-size: 26px;
+    letter-spacing: 1px;
+    line-height: 1.05;
+    margin-bottom: 4px;
+  }
+  .sched-loc { font-size: 13px; opacity: 0.8; margin-bottom: 12px; }
+  .sched-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sched-actions .btn { flex: 1; min-width: 0; }
+  .sched-icon-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: inherit;
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .sched-item:not(.next) .sched-icon-btn {
+    background: var(--white);
+    border-color: var(--cream-dark);
+    color: var(--dark-blue);
+  }
+  .sched-pill-past {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: var(--gray-light);
+    color: var(--dark-blue);
+    font-family: 'Bebas Neue';
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    padding: 3px 8px;
+    border-radius: 100px;
+  }
+  .form-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .form-row { display: flex; gap: 8px; }
+  .form-row .input { flex: 1; min-width: 0; }
+  .form-row .input[type="date"], .form-row .input[type="time"] {
+    font-family: 'Inter';
+    font-size: 15px;
+  }
+  .game-context {
+    background: rgba(189, 155, 96, 0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gold-deep);
+    letter-spacing: 1px;
+  }
+
+  /* ===== TEAM SETUP / PICKER ===== */
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 4px;
+    margin-bottom: 14px;
+  }
+  .team-tile {
+    border: 2px solid var(--cream-dark);
+    background: var(--white);
+    border-radius: 10px;
+    padding: 10px 6px 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-family: inherit;
+    color: inherit;
+  }
+  .team-tile:hover { border-color: var(--royal-blue); transform: translateY(-2px); }
+  .team-tile.selected {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px var(--gold), 0 4px 12px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+  }
+  .team-tile-mark {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue';
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.18);
+  }
+  .team-tile-name {
+    font-family: 'Bebas Neue';
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    line-height: 1.05;
+    color: var(--dark-blue);
+  }
+  .team-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .team-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--cream);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    cursor: pointer;
+  }
+  .team-list-item.active {
+    border-color: var(--gold);
+    background: linear-gradient(90deg, rgba(189,155,96,0.18), var(--white));
+  }
+  .team-list-mark {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue';
+    font-size: 13px;
+    flex-shrink: 0;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.18);
+  }
+  .team-list-info { flex: 1; min-width: 0; }
+  .team-list-name {
+    font-family: 'Bebas Neue';
+    font-size: 18px;
+    letter-spacing: 1px;
+    color: var(--dark-blue);
+    line-height: 1.1;
+  }
+  .team-list-meta {
+    font-size: 12px;
+    color: var(--gray);
+    margin-top: 2px;
+  }
+  .team-list-actions { display: flex; gap: 6px; }
+  .team-list-icon {
+    background: var(--white);
+    border: 1px solid var(--cream-dark);
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  /* ===== FIELDING CARD ===== */
+  .field-section {
+    margin-top: 14px;
+    margin-bottom: 14px;
+  }
+  .field-section-title {
+    font-family: 'Bebas Neue';
+    font-size: 14px;
+    letter-spacing: 2.5px;
+    color: var(--gold-deep);
+    margin: 14px 0 8px;
+  }
+  .field-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--cream);
+    border-radius: 8px;
+    border-left: 3px solid var(--royal-blue);
+  }
+  .field-row.pitcher {
+    background: linear-gradient(90deg, rgba(189,155,96,0.25), var(--cream));
+    border-left: 3px solid var(--gold);
+  }
+  .field-row.outfield { border-left: 3px solid var(--gold-deep); }
+  .field-pos {
+    width: 44px;
+    flex-shrink: 0;
+    font-family: 'Bebas Neue';
+    font-size: 18px;
+    letter-spacing: 1px;
+    color: var(--royal-blue);
+    text-align: center;
+    background: var(--white);
+    padding: 4px 0;
+    border-radius: 6px;
+    border: 1px solid var(--cream-dark);
+  }
+  .field-row.pitcher .field-pos { color: var(--gold-deep); border-color: var(--gold); }
+  .field-name {
+    flex: 1;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--dark-blue);
+  }
+  .field-was {
+    font-family: 'Bebas Neue';
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    color: var(--gray);
+    background: var(--white);
+    padding: 3px 8px;
+    border-radius: 100px;
+    border: 1px solid var(--cream-dark);
+  }
+  .field-was.swap { color: var(--gold-deep); border-color: var(--gold); }
+
+  .game-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .game-controls .btn {
+    font-size: 14px;
+    padding: 12px 10px;
+    letter-spacing: 1px;
+  }
+
+  .btn-next-batter {
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+    color: var(--dark-blue);
+    font-size: 22px;
+    padding: 20px;
+    letter-spacing: 3px;
+    border: 2px solid var(--gold-deep);
+  }
+
+  .footer-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    background: var(--white);
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid var(--cream-dark);
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .stat-label {
+    font-family: 'Bebas Neue';
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--gold-deep);
+  }
+  .stat-value {
+    font-family: 'Bebas Neue';
+    font-size: 26px;
+    color: var(--dark-blue);
+    line-height: 1.1;
+  }
+
+  /* fade in */
+  .view { animation: fade 0.25s ease-out; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  @media (max-width: 480px) {
+    .section-title { font-size: 32px; }
+    .sb-name { font-size: 36px; }
+    .sb-position-num { width: 72px; height: 72px; font-size: 48px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="header-row">
+      <button id="brand-btn" class="brand-btn" title="Switch teams">
+        <div class="brand-mark" id="brand-mark">KC</div>
+        <div class="brand-text">
+          <span class="small" id="brand-city">KANSAS CITY</span>
+          <span class="big" id="brand-mascot">ROYALS · LINEUP</span>
+        </div>
+        <span class="brand-chev" id="brand-chev">▾</span>
+      </button>
+      <button id="back-btn" class="header-back" style="display:none">← Back</button>
+    </div>
+  </header>
+  <main class="main" id="app"></main>
+</div>
+
+<script>
+// ============ MLB THEMES (all 30 teams + generic MLB default) ============
+const MLB_THEMES = {
+  // Generic MLB theme — used as the default before a team is picked.
+  // Inspired by official MLB navy/red logo: deep navy primary, classic baseball red accent.
+  mlb: { city: 'Major League', mascot: 'Baseball', abbr: 'MLB', primary: '#041E42', dark: '#001a3d', accent: '#BF0D3E' },
+  ari: { city: 'Arizona', mascot: 'Diamondbacks', abbr: 'ARI', primary: '#A71930', dark: '#0c1220', accent: '#E3D4AD' },
+  atl: { city: 'Atlanta', mascot: 'Braves', abbr: 'ATL', primary: '#CE1141', dark: '#13274F', accent: '#EAAA00' },
+  bal: { city: 'Baltimore', mascot: 'Orioles', abbr: 'BAL', primary: '#DF4601', dark: '#000000', accent: '#FFFFFF' },
+  bos: { city: 'Boston', mascot: 'Red Sox', abbr: 'BOS', primary: '#BD3039', dark: '#0C2340', accent: '#FFFFFF' },
+  chc: { city: 'Chicago', mascot: 'Cubs', abbr: 'CHC', primary: '#0E3386', dark: '#001A4F', accent: '#CC3433' },
+  cws: { city: 'Chicago', mascot: 'White Sox', abbr: 'CWS', primary: '#27251F', dark: '#000000', accent: '#C4CED4' },
+  cin: { city: 'Cincinnati', mascot: 'Reds', abbr: 'CIN', primary: '#C6011F', dark: '#000000', accent: '#FFFFFF' },
+  cle: { city: 'Cleveland', mascot: 'Guardians', abbr: 'CLE', primary: '#00385D', dark: '#001A3D', accent: '#E50022' },
+  col: { city: 'Colorado', mascot: 'Rockies', abbr: 'COL', primary: '#33006F', dark: '#1a0040', accent: '#C4CED4' },
+  det: { city: 'Detroit', mascot: 'Tigers', abbr: 'DET', primary: '#0C2340', dark: '#001a3d', accent: '#FA4616' },
+  hou: { city: 'Houston', mascot: 'Astros', abbr: 'HOU', primary: '#002D62', dark: '#001a3d', accent: '#EB6E1F' },
+  kc:  { city: 'Kansas City', mascot: 'Royals', abbr: 'KC', primary: '#004687', dark: '#002B5C', accent: '#BD9B60' },
+  laa: { city: 'Los Angeles', mascot: 'Angels', abbr: 'LAA', primary: '#BA0021', dark: '#003263', accent: '#862633' },
+  lad: { city: 'Los Angeles', mascot: 'Dodgers', abbr: 'LAD', primary: '#005A9C', dark: '#002b5c', accent: '#EF3E42' },
+  mia: { city: 'Miami', mascot: 'Marlins', abbr: 'MIA', primary: '#00A3E0', dark: '#000000', accent: '#EF3340' },
+  mil: { city: 'Milwaukee', mascot: 'Brewers', abbr: 'MIL', primary: '#12284B', dark: '#001a3d', accent: '#B6922E' },
+  min: { city: 'Minnesota', mascot: 'Twins', abbr: 'MIN', primary: '#002B5C', dark: '#001a3d', accent: '#D31145' },
+  nym: { city: 'New York', mascot: 'Mets', abbr: 'NYM', primary: '#002D72', dark: '#001a3d', accent: '#FF5910' },
+  nyy: { city: 'New York', mascot: 'Yankees', abbr: 'NYY', primary: '#003087', dark: '#0C2340', accent: '#C4CED3' },
+  oak: { city: 'Oakland', mascot: 'Athletics', abbr: 'OAK', primary: '#003831', dark: '#001a18', accent: '#EFB21E' },
+  phi: { city: 'Philadelphia', mascot: 'Phillies', abbr: 'PHI', primary: '#E81828', dark: '#002D72', accent: '#FFFFFF' },
+  pit: { city: 'Pittsburgh', mascot: 'Pirates', abbr: 'PIT', primary: '#27251F', dark: '#000000', accent: '#FDB827' },
+  sd:  { city: 'San Diego', mascot: 'Padres', abbr: 'SD', primary: '#2F241D', dark: '#000000', accent: '#FFC425' },
+  sf:  { city: 'San Francisco', mascot: 'Giants', abbr: 'SF', primary: '#FD5A1E', dark: '#27251F', accent: '#EFD19F' },
+  sea: { city: 'Seattle', mascot: 'Mariners', abbr: 'SEA', primary: '#0C2C56', dark: '#001a3d', accent: '#005C5C' },
+  stl: { city: 'St. Louis', mascot: 'Cardinals', abbr: 'STL', primary: '#C41E3A', dark: '#0C2340', accent: '#FEDB00' },
+  tb:  { city: 'Tampa Bay', mascot: 'Rays', abbr: 'TB', primary: '#092C5C', dark: '#001a3d', accent: '#8FBCE6' },
+  tex: { city: 'Texas', mascot: 'Rangers', abbr: 'TEX', primary: '#003278', dark: '#001a3d', accent: '#C0111F' },
+  tor: { city: 'Toronto', mascot: 'Blue Jays', abbr: 'TOR', primary: '#134A8E', dark: '#1D2D5C', accent: '#E8291C' },
+  was: { city: 'Washington', mascot: 'Nationals', abbr: 'WSH', primary: '#AB0003', dark: '#14225A', accent: '#FFFFFF' },
+};
+
+// Adjust a hex color by a brightness amount (-255 to +255). Used to derive
+// "bright" and "deep" variants of accent/dark colors per theme.
+function adjustHex(hex, amount) {
+  let h = String(hex || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (h.length !== 6) return hex;
+  let r = parseInt(h.slice(0, 2), 16);
+  let g = parseInt(h.slice(2, 4), 16);
+  let b = parseInt(h.slice(4, 6), 16);
+  r = Math.max(0, Math.min(255, r + amount));
+  g = Math.max(0, Math.min(255, g + amount));
+  b = Math.max(0, Math.min(255, b + amount));
+  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function applyTheme(themeKey) {
+  const t = MLB_THEMES[themeKey] || MLB_THEMES.mlb;
+  const root = document.documentElement;
+  root.style.setProperty('--royal-blue', t.primary);
+  root.style.setProperty('--dark-blue', t.dark);
+  root.style.setProperty('--deep-navy', adjustHex(t.dark, -20));
+  root.style.setProperty('--gold', t.accent);
+  root.style.setProperty('--gold-bright', adjustHex(t.accent, 25));
+  root.style.setProperty('--gold-deep', adjustHex(t.accent, -50));
+}
+
+// ============ STATE ============
+const STORAGE_KEYS = {
+  // Multi-team keys
+  teams: 'mlb:teams:v1',
+  activeTeamId: 'mlb:active:v1',
+  // Per-team keys (suffixed with team id)
+  rosterPrefix: 'mlb:roster:',
+  schedulePrefix: 'mlb:schedule:',
+  gamePrefix: 'mlb:game:',
+};
+
+const state = {
+  view: 'home', // home | team-setup | team-manage | attendance | lineup | game
+  teams: [],          // [{id, name, mlbTeam, createdAt}]
+  activeTeamId: null,
+  roster: [],         // active team's roster
+  schedule: [],       // active team's schedule
+  game: null,         // active team's in-progress game
+  ui: {
+    uploadError: null,
+    uploading: false,
+    uploadProgress: null,
+    uploadPhase: null,
+    extracted: null,
+    editingGameId: null,
+    pendingScheduleStart: null,
+    teamSetupMode: null,    // null | 'first' | 'add' — controls team setup UI
+    teamSetupChoice: 'mlb', // selected mlb team during setup; 'mlb' = none chosen yet
+    teamSetupName: '',      // selected team name during setup
+    editingTeamId: null,    // for renaming/changing team theme
+  },
+};
+
+function getActiveTeam() {
+  return state.teams.find(t => t.id === state.activeTeamId) || null;
+}
+function getActiveTheme() {
+  const t = getActiveTeam();
+  return (t && MLB_THEMES[t.mlbTeam]) || MLB_THEMES.mlb;
+}
+
+// ============ STORAGE ============
+// Uses the browser's localStorage so data persists across sessions on any
+// website (GitHub Pages, Netlify, opening the file directly, etc.).
+// All values are JSON-serialized.
+async function safeGet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : JSON.parse(raw);
+  } catch (e) {
+    console.error('safeGet failed', key, e);
+    return null;
+  }
+}
+async function safeSet(key, val) {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch (e) {
+    // Most likely cause: storage quota exceeded
+    console.error('safeSet failed', key, e);
+    alert('Could not save data — your device storage may be full. Try clearing some data or using a different browser.');
+  }
+}
+async function safeDelete(key) {
+  try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
+}
+
+async function loadFromStorage() {
+  // Load team list and active id
+  const teams = await safeGet(STORAGE_KEYS.teams);
+  const activeId = await safeGet(STORAGE_KEYS.activeTeamId);
+  if (Array.isArray(teams) && teams.length) {
+    state.teams = teams;
+    state.activeTeamId = (activeId && teams.find(t => t.id === activeId)) ? activeId : teams[0].id;
+  }
+
+  // Load active team data
+  if (state.activeTeamId) {
+    const r = await safeGet(STORAGE_KEYS.rosterPrefix + state.activeTeamId);
+    state.roster = Array.isArray(r) ? r : [];
+    const s = await safeGet(STORAGE_KEYS.schedulePrefix + state.activeTeamId);
+    state.schedule = Array.isArray(s) ? s : [];
+    const g = await safeGet(STORAGE_KEYS.gamePrefix + state.activeTeamId);
+    state.game = g || null;
+  }
+}
+
+async function saveTeams() {
+  await safeSet(STORAGE_KEYS.teams, state.teams);
+  await safeSet(STORAGE_KEYS.activeTeamId, state.activeTeamId);
+}
+async function saveRoster() {
+  if (!state.activeTeamId) return;
+  await safeSet(STORAGE_KEYS.rosterPrefix + state.activeTeamId, state.roster);
+}
+async function saveGame() {
+  if (!state.activeTeamId) return;
+  if (state.game) await safeSet(STORAGE_KEYS.gamePrefix + state.activeTeamId, state.game);
+  else await safeDelete(STORAGE_KEYS.gamePrefix + state.activeTeamId);
+}
+async function saveSchedule() {
+  if (!state.activeTeamId) return;
+  await safeSet(STORAGE_KEYS.schedulePrefix + state.activeTeamId, state.schedule);
+}
+
+async function switchActiveTeam(teamId) {
+  if (!state.teams.find(t => t.id === teamId)) return;
+  state.activeTeamId = teamId;
+  await safeSet(STORAGE_KEYS.activeTeamId, teamId);
+  // Reload that team's data
+  const r = await safeGet(STORAGE_KEYS.rosterPrefix + teamId);
+  state.roster = Array.isArray(r) ? r : [];
+  const s = await safeGet(STORAGE_KEYS.schedulePrefix + teamId);
+  state.schedule = Array.isArray(s) ? s : [];
+  const g = await safeGet(STORAGE_KEYS.gamePrefix + teamId);
+  state.game = g || null;
+}
+
+// ============ HELPERS ============
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function escape(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Could not read file'));
+    r.readAsDataURL(file);
+  });
+}
+
+// ============ SCHEDULE HELPERS ============
+function formatGameDate(dateStr, timeStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(y, m - 1, d);
+  const dayName = dt.toLocaleDateString('en-US', { weekday: 'short' });
+  const monthDay = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  let s = `${dayName.toUpperCase()}, ${monthDay.toUpperCase()}`;
+  if (timeStr) {
+    const [h, mn] = timeStr.split(':').map(Number);
+    if (!isNaN(h)) {
+      const hr = h % 12 || 12;
+      const ampm = h < 12 ? 'AM' : 'PM';
+      s += ` · ${hr}:${String(mn || 0).padStart(2, '0')} ${ampm}`;
+    }
+  }
+  return s;
+}
+function gameSortKey(g) {
+  return (g.date || '9999-99-99') + 'T' + (g.time || '23:59');
+}
+function isPastGame(g) {
+  if (!g.date) return false;
+  const [y, m, d] = g.date.split('-').map(Number);
+  let dt = new Date(y, m - 1, d);
+  if (g.time) {
+    const [h, mn] = g.time.split(':').map(Number);
+    dt.setHours(h || 0, mn || 0);
+  } else {
+    dt.setHours(23, 59);
+  }
+  return dt < new Date();
+}
+function sortedSchedule() {
+  return [...state.schedule].sort((a, b) => gameSortKey(a).localeCompare(gameSortKey(b)));
+}
+
+// ============ FIELDING POSITIONS ============
+// No catcher per coach's request. Pitcher rotates separately.
+const INFIELD_POSITIONS = ['1B', '2B', '3B', 'SS'];
+const OUTFIELD_POSITIONS = ['LF', 'CF', 'RF'];
+
+// Distribute N players across positions, doubling up positions when N > positions.length.
+// Returns an array length N where each entry is a position name. Positions are filled
+// one round at a time so e.g. 5 players across 4 infield slots = each spot gets 1, then
+// one spot gets a 2nd player.
+function distributeAcrossPositions(n, positions) {
+  const result = [];
+  const shuffledPositions = shuffle(positions);
+  let i = 0;
+  while (result.length < n) {
+    result.push(shuffledPositions[i % shuffledPositions.length]);
+    i++;
+  }
+  return result;
+}
+
+// Generate fielding assignments for a single inning given the player ids in the
+// infield group, outfield group, and the pitcher id. Returns
+// { pitcherId, assignments: { playerId: position } }.
+function buildInningAssignments(infieldIds, outfieldIds, pitcherId) {
+  const assignments = {};
+  if (pitcherId) assignments[pitcherId] = 'P';
+  // Shuffle the player order so even though positions are randomized too, we don't
+  // get the same kid at SS every other inning when groups are small.
+  const inOrder = shuffle(infieldIds);
+  const outOrder = shuffle(outfieldIds);
+  const inPositions = distributeAcrossPositions(inOrder.length, INFIELD_POSITIONS);
+  const outPositions = distributeAcrossPositions(outOrder.length, OUTFIELD_POSITIONS);
+  inOrder.forEach((id, idx) => { assignments[id] = inPositions[idx]; });
+  outOrder.forEach((id, idx) => { assignments[id] = outPositions[idx]; });
+  return { pitcherId, assignments };
+}
+
+// Build inning 1 from scratch: pick a random pitcher, split the rest roughly 50/50
+// between infield and outfield (infield gets the extra when odd).
+function generateInitialFielding(playerIds) {
+  if (playerIds.length === 0) return null;
+  const shuffled = shuffle(playerIds);
+  const pitcherId = shuffled[0];
+  const remaining = shuffled.slice(1);
+  // Roughly even split, infield gets the extra on odd counts
+  const infieldCount = Math.ceil(remaining.length / 2);
+  const infieldIds = remaining.slice(0, infieldCount);
+  const outfieldIds = remaining.slice(infieldCount);
+  const inning = buildInningAssignments(infieldIds, outfieldIds, pitcherId);
+  return {
+    pitchedIds: [pitcherId],            // history of who has pitched
+    innings: [inning],                  // one entry per inning (index 0 = inning 1)
+  };
+}
+
+// Build the next inning's assignments based on the previous inning's split.
+// Rule: anyone in infield last inning goes to outfield this inning, and vice versa.
+// New pitcher: pick from players who haven't pitched yet; if everyone has, pick the
+// one who pitched longest ago.
+function generateNextInning(fielding, playerIds) {
+  if (!fielding || fielding.innings.length === 0) {
+    return generateInitialFielding(playerIds);
+  }
+  const prev = fielding.innings[fielding.innings.length - 1];
+  const prevAssign = prev.assignments;
+
+  // Identify who was where last inning. Any current attendee not in prevAssign
+  // (someone who joined late, hypothetically) gets bucketed into the smaller group.
+  const wasInfield = [];
+  const wasOutfield = [];
+  const wasPitcher = [];
+  const newPlayers = [];
+  playerIds.forEach(id => {
+    const pos = prevAssign[id];
+    if (!pos) { newPlayers.push(id); return; }
+    if (pos === 'P') wasPitcher.push(id);
+    else if (INFIELD_POSITIONS.includes(pos)) wasInfield.push(id);
+    else if (OUTFIELD_POSITIONS.includes(pos)) wasOutfield.push(id);
+    else newPlayers.push(id);
+  });
+
+  // Pick the next pitcher: prefer someone who hasn't pitched yet
+  const pitched = new Set(fielding.pitchedIds);
+  const neverPitched = playerIds.filter(id => !pitched.has(id));
+  let nextPitcherId;
+  if (neverPitched.length > 0) {
+    nextPitcherId = shuffle(neverPitched)[0];
+  } else {
+    // Everyone has pitched; pick the one who pitched longest ago (earliest in pitchedIds)
+    nextPitcherId = fielding.pitchedIds.find(id => playerIds.includes(id)) || playerIds[0];
+  }
+
+  // Swap: was-infield → outfield this inning; was-outfield → infield
+  let nextInfield = wasOutfield.slice();
+  let nextOutfield = wasInfield.slice();
+
+  // The previous pitcher needs to be placed somewhere. Put them in whichever
+  // group is smaller to balance the split.
+  wasPitcher.forEach(id => {
+    if (id === nextPitcherId) return; // unlikely but safe
+    if (nextInfield.length <= nextOutfield.length) nextInfield.push(id);
+    else nextOutfield.push(id);
+  });
+
+  // New attendees: bucket into the smaller group
+  newPlayers.forEach(id => {
+    if (id === nextPitcherId) return;
+    if (nextInfield.length <= nextOutfield.length) nextInfield.push(id);
+    else nextOutfield.push(id);
+  });
+
+  // The new pitcher might be in nextInfield or nextOutfield from the swap above; remove them
+  nextInfield = nextInfield.filter(id => id !== nextPitcherId);
+  nextOutfield = nextOutfield.filter(id => id !== nextPitcherId);
+
+  const inning = buildInningAssignments(nextInfield, nextOutfield, nextPitcherId);
+  return {
+    pitchedIds: fielding.pitchedIds.concat(nextPitcherId),
+    innings: fielding.innings.concat(inning),
+  };
+}
+
+// Get the assignments for a given inning index, generating any innings up to that
+// index if they don't exist yet.
+function ensureFieldingForInning(game, inningIdx) {
+  const playerIds = game.lineup.map(p => p.id);
+  if (!game.fielding) {
+    game.fielding = generateInitialFielding(playerIds);
+  }
+  while (game.fielding.innings.length <= inningIdx) {
+    game.fielding = generateNextInning(game.fielding, playerIds);
+  }
+  return game.fielding.innings[inningIdx];
+}
+
+// ============ ROSTER OCR (Tesseract.js, runs in browser) ============
+function parseRosterText(text) {
+  // Words/labels we want to discard if they appear as a whole line
+  const skip = new Set([
+    'name','names','number','numbers','jersey','position','positions','pos',
+    'roster','team','player','players','coach','coaches','manager','assistant',
+    'season','spring','summer','fall','winter','league','division','grade',
+    'no','phone','email','parent','guardian','contact','dob','birthday','age'
+  ]);
+  // Common position abbreviations to strip from end of a line
+  const posAbbr = /\s+(P|C|1B|2B|3B|SS|LF|CF|RF|OF|IF|DH|UTIL|UT)\s*$/i;
+
+  return text
+    .split(/\r?\n/)
+    .map(raw => {
+      let line = raw.trim();
+      if (!line) return '';
+      // Strip leading jersey number: "12 John Smith", "#12 John Smith", "12. John Smith"
+      line = line.replace(/^#?\s*\d+\s*[\.\)\-:]?\s+/, '');
+      // Strip trailing jersey number: "John Smith 12" or "John Smith #12"
+      line = line.replace(/\s+#?\s*\d+\s*$/, '');
+      // Strip trailing position abbreviation
+      line = line.replace(posAbbr, '');
+      // Collapse internal whitespace
+      line = line.replace(/\s+/g, ' ').trim();
+      return line;
+    })
+    .filter(line => {
+      if (line.length < 2 || line.length > 50) return false;
+      if (/^\d+$/.test(line)) return false;                     // pure numbers
+      if (skip.has(line.toLowerCase())) return false;            // header words
+      if (line.replace(/[^a-zA-Z]/g, '').length < 2) return false; // need real letters
+      return true;
+    });
+}
+
+// Convert any image (incl. iPhone HEIC) to a normalized JPEG blob via canvas.
+// This also downscales very large photos so Tesseract doesn't choke.
+function preprocessImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const maxDim = 1800;
+        const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Could not convert image. Try a different photo.'));
+        }, 'image/jpeg', 0.9);
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read this image format. Try saving the photo as JPEG and uploading again.'));
+    };
+    img.src = url;
+  });
+}
+
+async function extractRosterFromImage(file, onProgress) {
+  if (typeof Tesseract === 'undefined') {
+    throw new Error('OCR library failed to load. Check your internet connection and refresh the page.');
+  }
+  // Step 1: normalize image (handles HEIC, big files, weird formats)
+  onProgress && onProgress(0, 'preparing');
+  let processed;
+  try {
+    processed = await preprocessImage(file);
+  } catch (e) {
+    throw new Error(e.message || 'Could not read image file.');
+  }
+  // Step 2: run OCR
+  try {
+    const result = await Tesseract.recognize(processed, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+          onProgress && onProgress(Math.round(m.progress * 100), 'reading');
+        } else if (m.status && m.status.indexOf('loading') === 0) {
+          onProgress && onProgress(0, 'loading');
+        } else if (m.status === 'initializing api' || m.status === 'initializing tesseract') {
+          onProgress && onProgress(0, 'starting');
+        }
+      }
+    });
+    const text = (result && result.data && result.data.text) || '';
+    return parseRosterText(text);
+  } catch (e) {
+    throw new Error('OCR failed: ' + (e && e.message ? e.message : 'unknown error') + '. If this keeps happening, add players manually.');
+  }
+}
+
+// ============ ACTIONS ============
+function addPlayer(name) {
+  const n = name.trim();
+  if (!n) return;
+  state.roster.push({ id: uid(), name: n, attending: true });
+  saveRoster();
+  render();
+}
+function removePlayer(id) {
+  state.roster = state.roster.filter(p => p.id !== id);
+  saveRoster();
+  render();
+}
+function toggleAttend(id) {
+  const p = state.roster.find(x => x.id === id);
+  if (p) { p.attending = !p.attending; saveRoster(); render(); }
+}
+function setAllAttending(val) {
+  state.roster.forEach(p => p.attending = val);
+  saveRoster();
+  render();
+}
+function generateLineup() {
+  const present = state.roster.filter(p => p.attending);
+  if (present.length === 0) return;
+  const order = shuffle(present).map(p => ({ id: p.id, name: p.name }));
+  const sched = state.ui.pendingScheduleStart;
+  state.game = {
+    startedAt: new Date().toISOString(),
+    scheduleId: sched ? sched.id : null,
+    opponent: sched ? sched.opponent : null,
+    gameDate: sched ? sched.date : null,
+    lineup: order,
+    currentIndex: 0,
+    inning: 1,
+    atBatCount: 0,
+    fielding: null, // populated lazily
+  };
+  // Generate inning 1 fielding immediately so the game view has it ready
+  ensureFieldingForInning(state.game, 0);
+  saveGame();
+  state.view = 'lineup';
+  render();
+}
+
+// ============ SCHEDULE ACTIONS ============
+function saveGameEntry(formData) {
+  const { id, date, time, opponent, location } = formData;
+  if (!date || !opponent.trim()) return;
+  if (id && id !== 'new') {
+    const idx = state.schedule.findIndex(g => g.id === id);
+    if (idx >= 0) state.schedule[idx] = { id, date, time: time || '', opponent: opponent.trim(), location: (location || '').trim() };
+  } else {
+    state.schedule.push({ id: uid(), date, time: time || '', opponent: opponent.trim(), location: (location || '').trim() });
+  }
+  state.ui.editingGameId = null;
+  saveSchedule();
+  render();
+}
+function removeScheduledGame(id) {
+  if (!confirm('Remove this game from the schedule?')) return;
+  state.schedule = state.schedule.filter(g => g.id !== id);
+  saveSchedule();
+  render();
+}
+function startScheduledGame(id) {
+  const g = state.schedule.find(x => x.id === id);
+  if (!g) return;
+  state.ui.pendingScheduleStart = g;
+  state.roster.forEach(p => { if (p.attending === undefined) p.attending = true; });
+  state.view = 'attendance';
+  render();
+}
+function reshuffle() {
+  if (!state.game) return;
+  state.game.lineup = shuffle(state.game.lineup);
+  state.game.currentIndex = 0;
+  saveGame();
+  render();
+}
+function startGame() {
+  if (!state.game) return;
+  state.view = 'game';
+  render();
+}
+function nextBatter() {
+  if (!state.game) return;
+  state.game.currentIndex = (state.game.currentIndex + 1) % state.game.lineup.length;
+  state.game.atBatCount++;
+  saveGame();
+  render();
+}
+function prevBatter() {
+  if (!state.game) return;
+  const len = state.game.lineup.length;
+  state.game.currentIndex = (state.game.currentIndex - 1 + len) % len;
+  state.game.atBatCount = Math.max(0, state.game.atBatCount - 1);
+  saveGame();
+  render();
+}
+function nextInning() {
+  if (!state.game) return;
+  state.game.inning++;
+  // Generate fielding for the new inning if needed
+  ensureFieldingForInning(state.game, state.game.inning - 1);
+  saveGame();
+  render();
+}
+function prevInning() {
+  if (!state.game || state.game.inning <= 1) return;
+  state.game.inning--;
+  saveGame();
+  render();
+}
+function reshuffleCurrentInningFielding() {
+  if (!state.game || !state.game.fielding) return;
+  const inningIdx = state.game.inning - 1;
+  const playerIds = state.game.lineup.map(p => p.id);
+  if (inningIdx === 0) {
+    // Inning 1: full re-randomize from scratch
+    state.game.fielding = generateInitialFielding(playerIds);
+  } else {
+    // Later innings: re-derive from previous inning's split, then regenerate this one
+    state.game.fielding.innings = state.game.fielding.innings.slice(0, inningIdx);
+    state.game.fielding.pitchedIds = state.game.fielding.pitchedIds.slice(0, inningIdx);
+    state.game.fielding = generateNextInning(state.game.fielding, playerIds);
+  }
+  // Drop any pre-generated future innings since the swap pattern needs re-computing
+  state.game.fielding.innings = state.game.fielding.innings.slice(0, inningIdx + 1);
+  saveGame();
+  render();
+}
+function endGame() {
+  if (!confirm('End this game and return home? The lineup will be cleared.')) return;
+  const wasScheduled = state.game && state.game.scheduleId;
+  const opponent = state.game && state.game.opponent;
+  if (wasScheduled && confirm(`Mark "${opponent || 'this game'}" as completed and remove from schedule?`)) {
+    state.schedule = state.schedule.filter(g => g.id !== state.game.scheduleId);
+    saveSchedule();
+  }
+  state.game = null;
+  state.ui.pendingScheduleStart = null;
+  saveGame();
+  state.view = 'home';
+  render();
+}
+
+// ============ TEAM ACTIONS ============
+async function createTeam(name, mlbTeam) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return;
+  const newTeam = { id: uid(), name: trimmed, mlbTeam: mlbTeam || 'mlb', createdAt: new Date().toISOString() };
+  state.teams.push(newTeam);
+  state.activeTeamId = newTeam.id;
+  state.roster = [];
+  state.schedule = [];
+  state.game = null;
+  state.ui.teamSetupMode = null;
+  state.ui.teamSetupName = '';
+  state.ui.teamSetupChoice = 'mlb';
+  await saveTeams();
+  await saveRoster();
+  await saveSchedule();
+  await saveGame();
+  applyTheme(newTeam.mlbTeam);
+  state.view = 'home';
+  render();
+}
+
+async function pickTeam(teamId) {
+  await switchActiveTeam(teamId);
+  const team = getActiveTeam();
+  if (team) applyTheme(team.mlbTeam);
+  state.view = 'home';
+  render();
+}
+
+async function deleteTeam(teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return;
+  if (!confirm(`Permanently delete "${team.name}" and all their roster, schedule, and game data?`)) return;
+  // Wipe per-team storage
+  await safeDelete(STORAGE_KEYS.rosterPrefix + teamId);
+  await safeDelete(STORAGE_KEYS.schedulePrefix + teamId);
+  await safeDelete(STORAGE_KEYS.gamePrefix + teamId);
+  state.teams = state.teams.filter(t => t.id !== teamId);
+  // Pick a fallback active team
+  if (state.activeTeamId === teamId) {
+    if (state.teams.length > 0) {
+      await switchActiveTeam(state.teams[0].id);
+      applyTheme(getActiveTheme && getActiveTeam() ? getActiveTeam().mlbTeam : 'mlb');
+    } else {
+      state.activeTeamId = null;
+      state.roster = [];
+      state.schedule = [];
+      state.game = null;
+      state.view = 'team-setup';
+      state.ui.teamSetupMode = 'first';
+    }
+  }
+  await saveTeams();
+  render();
+}
+
+async function updateTeamTheme(teamId, mlbTeam, newName) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return;
+  if (newName !== undefined) team.name = newName.trim() || team.name;
+  if (mlbTeam) team.mlbTeam = mlbTeam;
+  await saveTeams();
+  if (teamId === state.activeTeamId) applyTheme(team.mlbTeam);
+  state.ui.editingTeamId = null;
+  render();
+}
+
+// ============ VIEWS ============
+function renderTeamPickerGrid(selectedKey) {
+  // Exclude the generic 'mlb' theme — it's the default placeholder, not a pickable team
+  const keys = Object.keys(MLB_THEMES).filter(k => k !== 'mlb');
+  return `
+    <div class="team-grid">
+      ${keys.map(k => {
+        const t = MLB_THEMES[k];
+        const sel = k === selectedKey ? 'selected' : '';
+        return `
+          <button class="team-tile ${sel}" data-action="pick-mlb" data-key="${k}" type="button">
+            <div class="team-tile-mark" style="background:${t.accent};color:${t.dark};border:2px solid ${t.primary};">${t.abbr}</div>
+            <div class="team-tile-name">${escape(t.mascot)}</div>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function viewTeamSetup() {
+  const isFirst = state.ui.teamSetupMode === 'first';
+  const selected = state.ui.teamSetupChoice || 'mlb';
+  const selectedTheme = MLB_THEMES[selected];
+  const hasTeamPicked = selected !== 'mlb';
+  // If user hasn't typed a name yet, suggest the picked team's mascot (only if they picked one)
+  const defaultName = state.ui.teamSetupName || (hasTeamPicked ? selectedTheme.mascot : '');
+  return `
+    <div class="view">
+      <div class="section-label">⚾ ${isFirst ? 'WELCOME — STEP 1' : 'NEW TEAM'}</div>
+      <h1 class="section-title">${isFirst ? 'Set Up Your Team' : 'Add a Team'}</h1>
+      <p style="font-size:14px;color:var(--gray);margin-bottom:18px;">
+        ${isFirst
+          ? 'Pick an MLB theme for your team colors, then name your team. You can add more teams later.'
+          : 'Pick an MLB theme and name. Each team has its own roster, schedule, and games.'}
+      </p>
+
+      <div class="card">
+        <div class="card-title">Pick MLB Theme ${hasTeamPicked
+          ? `<span class="card-pill">${selectedTheme.city.toUpperCase()} · ${selectedTheme.mascot.toUpperCase()}</span>`
+          : `<span class="card-pill" style="background:var(--cream-dark);">CHOOSE A TEAM</span>`}</div>
+        ${renderTeamPickerGrid(selected)}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Team Name</div>
+        <input class="input" id="setup-team-name" type="text" placeholder="e.g. Tigers, U10 Royals, Westside Stars" value="${escape(defaultName)}">
+        <p style="font-size:12px;color:var(--gray);margin-top:8px;">Your league team's name. Auto-fills with the MLB mascot, but you can change it.</p>
+      </div>
+
+      <div class="btn-stack">
+        <button class="btn btn-gold" data-action="confirm-team-setup">⚾ ${isFirst ? "LET'S PLAY BALL" : 'ADD TEAM'}</button>
+        ${state.teams.length > 0 ? `<button class="btn btn-ghost" data-action="cancel-team-setup">CANCEL</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function viewTeamManage() {
+  const editing = state.ui.editingTeamId;
+  return `
+    <div class="view">
+      <div class="section-label">⚾ MANAGE</div>
+      <h1 class="section-title">Your Teams</h1>
+      <p style="font-size:14px;color:var(--gray);margin-bottom:18px;">Tap a team to switch. Each team keeps its own roster, schedule, and game state.</p>
+
+      <ul class="team-list">
+        ${state.teams.map(team => {
+          const theme = MLB_THEMES[team.mlbTeam] || MLB_THEMES.mlb;
+          const isActive = team.id === state.activeTeamId;
+          const isEditing = team.id === editing;
+          return `
+            <li class="team-list-item ${isActive ? 'active' : ''}">
+              <div class="team-list-mark" style="background:${theme.accent};color:${theme.dark};border:2px solid ${theme.primary};">${theme.abbr}</div>
+              <div class="team-list-info">
+                ${isEditing
+                  ? `<input class="input" id="edit-team-name-${team.id}" value="${escape(team.name)}" style="font-size:15px;padding:8px 10px;">`
+                  : `<div class="team-list-name">${escape(team.name)}</div><div class="team-list-meta">${escape(theme.city)} · ${escape(theme.mascot)}${isActive ? ' · ACTIVE' : ''}</div>`
+                }
+              </div>
+              <div class="team-list-actions">
+                ${isEditing
+                  ? `<button class="team-list-icon" data-action="save-team-edit" data-id="${team.id}" title="Save">✓</button>
+                     <button class="team-list-icon" data-action="cancel-team-edit" title="Cancel">✕</button>`
+                  : `${!isActive ? `<button class="team-list-icon" data-action="switch-team" data-id="${team.id}" title="Switch to this team">▶</button>` : ''}
+                     <button class="team-list-icon" data-action="edit-team" data-id="${team.id}" title="Rename">✏️</button>
+                     <button class="team-list-icon" data-action="delete-team" data-id="${team.id}" title="Delete" style="color:var(--red);">🗑️</button>`
+                }
+              </div>
+            </li>
+            ${isEditing ? `
+              <li>
+                <div class="card" style="margin-bottom:0;">
+                  <div class="card-title">Change MLB Theme</div>
+                  ${renderTeamPickerGrid(team.mlbTeam)}
+                  <p style="font-size:12px;color:var(--gray);">Tap any theme above to apply it to ${escape(team.name)}.</p>
+                </div>
+              </li>
+            ` : ''}
+          `;
+        }).join('')}
+      </ul>
+
+      <button class="btn btn-gold" data-action="add-new-team">+ ADD ANOTHER TEAM</button>
+    </div>
+  `;
+}
+
+
+function renderScheduleForm() {
+  const editing = state.ui.editingGameId;
+  if (!editing) return '';
+  const isNew = editing === 'new';
+  const game = isNew ? { id: 'new', date: '', time: '', opponent: '', location: '' } : state.schedule.find(g => g.id === editing);
+  if (!game) return '';
+  return `
+    <div class="card" style="border:2px solid var(--royal-blue);">
+      <div class="card-title">${isNew ? 'Add Game' : 'Edit Game'}</div>
+      <div class="form-grid">
+        <div class="form-row">
+          <input class="input" type="date" id="form-date" value="${escape(game.date || '')}" required>
+          <input class="input" type="time" id="form-time" value="${escape(game.time || '')}">
+        </div>
+        <input class="input" type="text" id="form-opponent" placeholder="Opponent (e.g. Tigers)" value="${escape(game.opponent || '')}" required>
+        <input class="input" type="text" id="form-location" placeholder="Location (optional)" value="${escape(game.location || '')}">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-gold btn-small" data-action="save-game" data-id="${game.id}">SAVE</button>
+        <button class="btn btn-ghost btn-small" data-action="cancel-game-form">CANCEL</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderScheduleCard() {
+  const games = sortedSchedule();
+  // Find the next upcoming (first not-past)
+  const nextIdx = games.findIndex(g => !isPastGame(g));
+  return `
+    <div class="card">
+      <div class="card-title">
+        Schedule
+        <span class="card-pill">${games.length} ${games.length === 1 ? 'GAME' : 'GAMES'}</span>
+      </div>
+      ${games.length === 0 ? `
+        <div class="empty" style="padding:20px 0;">
+          <div class="empty-icon">📅</div>
+          <div>No games scheduled. Add your first game below.</div>
+        </div>
+      ` : `
+        <ul class="sched-list">
+          ${games.map((g, i) => {
+            const past = isPastGame(g);
+            const isNext = i === nextIdx;
+            const cls = past ? 'past' : (isNext ? 'next' : '');
+            return `
+              <li class="sched-item ${cls}">
+                ${past ? `<span class="sched-pill-past">PAST</span>` : ''}
+                <div class="sched-date">${escape(formatGameDate(g.date, g.time))}</div>
+                <div class="sched-opponent">VS ${escape(g.opponent.toUpperCase())}</div>
+                ${g.location ? `<div class="sched-loc">${escape(g.location)}</div>` : ''}
+                <div class="sched-actions">
+                  ${past ? '' : `<button class="btn ${isNext ? 'btn-gold' : 'btn-primary'} btn-small" data-action="start-scheduled" data-id="${g.id}">▶ START GAME</button>`}
+                  <button class="sched-icon-btn" data-action="edit-game" data-id="${g.id}" title="Edit">✏️</button>
+                  <button class="sched-icon-btn" data-action="remove-game" data-id="${g.id}" title="Delete">🗑️</button>
+                </div>
+              </li>
+            `;
+          }).join('')}
+        </ul>
+      `}
+      ${state.ui.editingGameId !== 'new' ? `
+        <button class="btn btn-ghost btn-small" data-action="add-game" style="width:100%;margin-top:4px;">+ ADD GAME</button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function viewHome() {
+  const hasRoster = state.roster.length > 0;
+  const hasGame = !!state.game;
+
+  let resumeHtml = '';
+  if (hasGame) {
+    const cur = state.game.lineup[state.game.currentIndex];
+    const ctx = state.game.opponent ? `vs ${state.game.opponent} · ` : '';
+    resumeHtml = `
+      <div class="resume-banner">
+        <div class="resume-banner-text">
+          <div class="resume-banner-label">GAME IN PROGRESS</div>
+          <div class="resume-banner-detail">${escape(ctx)}Inning ${state.game.inning} · Up: ${escape(cur.name)}</div>
+        </div>
+        <button class="btn btn-primary btn-small" data-action="resume">RESUME</button>
+      </div>
+    `;
+  }
+
+  let extractedHtml = '';
+  if (state.ui.extracted) {
+    extractedHtml = `
+      <div class="card" style="border:2px solid var(--gold);">
+        <div class="card-title">Review Extracted Names <span class="card-pill">${state.ui.extracted.length} found</span></div>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:10px;">Edit any name, uncheck to skip, then save.</p>
+        <ul class="extracted-list">
+          ${state.ui.extracted.map((e, i) => `
+            <li class="extracted-item">
+              <input type="checkbox" data-extracted-check="${i}" ${e.checked ? 'checked' : ''}>
+              <input type="text" data-extracted-name="${i}" value="${escape(e.name)}">
+            </li>
+          `).join('')}
+        </ul>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-gold btn-small" data-action="save-extracted">ADD TO ROSTER</button>
+          <button class="btn btn-ghost btn-small" data-action="cancel-extracted">CANCEL</button>
+        </div>
+      </div>
+    `;
+  }
+
+  let errorHtml = state.ui.uploadError ? `<div class="error">${escape(state.ui.uploadError)}</div>` : '';
+
+  return `
+    <div class="view">
+      ${resumeHtml}
+
+      <div class="section-label">⚾ TEAM HQ</div>
+      <h1 class="section-title">${escape((getActiveTeam() && getActiveTeam().name) || 'Your')} Dugout</h1>
+
+      ${renderScheduleCard()}
+      ${state.ui.editingGameId ? renderScheduleForm() : ''}
+
+      ${errorHtml}
+      ${extractedHtml}
+
+      <div class="card">
+        <div class="card-title">
+          Roster
+          <span class="card-pill">${state.roster.length} ${state.roster.length === 1 ? 'PLAYER' : 'PLAYERS'}</span>
+        </div>
+
+        <div class="input-row">
+          <input class="input" id="new-player-input" placeholder="Add player name…" />
+          <button class="btn btn-primary btn-small" data-action="add-player">ADD</button>
+        </div>
+
+        ${hasRoster ? `
+          <ul class="player-list">
+            ${state.roster.map(p => `
+              <li class="player-row">
+                <span class="player-name">${escape(p.name)}</span>
+                <button class="player-remove" data-action="remove-player" data-id="${p.id}">REMOVE</button>
+              </li>
+            `).join('')}
+          </ul>
+        ` : `
+          <div class="empty">
+            <div class="empty-icon">🧢</div>
+            <div>No players yet. Add them above or upload a roster photo below.</div>
+          </div>
+        `}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Upload Roster Photo</div>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">Snap or upload a photo of your printed roster — the names will be read automatically. Works offline; no account needed.</p>
+        <label class="upload-zone">
+          <input type="file" id="roster-image" accept="image/*" style="display:none" />
+          ${state.ui.uploading
+            ? `<div><span class="loading"></span> ${
+                state.ui.uploadPhase === 'preparing' ? 'Preparing image…' :
+                state.ui.uploadPhase === 'loading' ? 'Loading OCR engine (first run only)…' :
+                state.ui.uploadPhase === 'starting' ? 'Starting up…' :
+                'Reading roster…'
+              } ${state.ui.uploadProgress != null && state.ui.uploadPhase === 'reading' ? state.ui.uploadProgress + '%' : ''}</div>`
+            : `<div><strong>Tap to choose photo</strong><p>JPEG or PNG of a printed roster works best</p></div>`}
+        </label>
+      </div>
+
+      ${hasRoster ? `
+        <button class="btn btn-gold" data-action="start-attendance">⚾ QUICK START GAME (UNSCHEDULED)</button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function viewAttendance() {
+  const present = state.roster.filter(p => p.attending).length;
+  const sched = state.ui.pendingScheduleStart;
+  const ctx = sched ? `<div class="game-context">VS ${escape(sched.opponent.toUpperCase())} · ${escape(formatGameDate(sched.date, sched.time))}</div>` : '';
+  return `
+    <div class="view">
+      ${ctx}
+      <div class="section-label">STEP 1 OF 2</div>
+      <h1 class="section-title">Who's Here Today?</h1>
+
+      <div class="att-count">${present} OF ${state.roster.length} PLAYERS PRESENT</div>
+
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="btn btn-ghost btn-small" data-action="all-on">ALL IN</button>
+        <button class="btn btn-ghost btn-small" data-action="all-off">CLEAR</button>
+      </div>
+
+      <ul class="player-list">
+        ${state.roster.map(p => `
+          <li class="att-row ${p.attending ? 'on' : 'off'}" data-action="toggle-attend" data-id="${p.id}">
+            <div class="att-toggle"></div>
+            <div class="att-name">${escape(p.name)}</div>
+          </li>
+        `).join('')}
+      </ul>
+
+      <div class="btn-stack">
+        <button class="btn btn-gold" data-action="generate-lineup" ${present === 0 ? 'disabled style="opacity:0.5;"' : ''}>⚾ GENERATE BATTING ORDER</button>
+      </div>
+    </div>
+  `;
+}
+
+function viewLineup() {
+  if (!state.game) return '';
+  const ctx = state.game.opponent ? `<div class="game-context">VS ${escape(state.game.opponent.toUpperCase())}${state.game.gameDate ? ' · ' + escape(formatGameDate(state.game.gameDate, '')) : ''}</div>` : '';
+  return `
+    <div class="view">
+      ${ctx}
+      <div class="section-label">STEP 2 OF 2 · BATTING ORDER</div>
+      <h1 class="section-title">Today's Lineup</h1>
+      <p style="font-size:14px;color:var(--gray);margin-bottom:18px;">Randomly generated. Reshuffle if you want a different order.</p>
+
+      <ul class="lineup-list">
+        ${state.game.lineup.map((p, i) => `
+          <li class="lineup-item">
+            <div class="lineup-num">${i + 1}</div>
+            <div class="lineup-name">${escape(p.name)}</div>
+          </li>
+        `).join('')}
+      </ul>
+
+      <div class="card" style="margin-top:18px;">
+        <div class="card-title">
+          Inning 1 Fielding
+          <button class="btn btn-ghost btn-small" data-action="reshuffle-fielding" style="font-size:11px;padding:6px 12px;letter-spacing:1px;">🎲 RESHUFFLE</button>
+        </div>
+        ${renderFieldingForCurrentInning(state.game)}
+      </div>
+
+      <div class="btn-stack">
+        <button class="btn btn-primary" data-action="start-game">▶ START GAME</button>
+        <button class="btn btn-ghost" data-action="reshuffle">🎲 RESHUFFLE BATTING ORDER</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderFieldingForCurrentInning(game) {
+  const inningIdx = game.inning - 1;
+  // Make sure assignments exist for this inning
+  ensureFieldingForInning(game, inningIdx);
+  const inning = game.fielding.innings[inningIdx];
+  const prevInning = inningIdx > 0 ? game.fielding.innings[inningIdx - 1] : null;
+  const nameById = Object.fromEntries(game.lineup.map(p => [p.id, p.name]));
+
+  // Group rendering: pitcher → infield → outfield
+  const pitcherEntry = inning.pitcherId
+    ? [{ id: inning.pitcherId, position: 'P', kind: 'pitcher' }]
+    : [];
+  const infieldEntries = [];
+  const outfieldEntries = [];
+  Object.entries(inning.assignments).forEach(([id, pos]) => {
+    if (id === inning.pitcherId) return;
+    if (INFIELD_POSITIONS.includes(pos)) infieldEntries.push({ id, position: pos, kind: 'infield' });
+    else if (OUTFIELD_POSITIONS.includes(pos)) outfieldEntries.push({ id, position: pos, kind: 'outfield' });
+  });
+
+  // Sort by position name within each group for stable display
+  const posOrder = pos => [...INFIELD_POSITIONS, ...OUTFIELD_POSITIONS].indexOf(pos);
+  infieldEntries.sort((a, b) => posOrder(a.position) - posOrder(b.position));
+  outfieldEntries.sort((a, b) => posOrder(a.position) - posOrder(b.position));
+
+  function rowFor(entry) {
+    const wasPos = prevInning ? prevInning.assignments[entry.id] : null;
+    let wasLabel = '';
+    if (wasPos) {
+      const wasInfield = INFIELD_POSITIONS.includes(wasPos);
+      const wasOutfield = OUTFIELD_POSITIONS.includes(wasPos);
+      const nowInfield = entry.kind === 'infield';
+      const nowOutfield = entry.kind === 'outfield';
+      const swapped = (wasInfield && nowOutfield) || (wasOutfield && nowInfield);
+      if (entry.kind === 'pitcher') wasLabel = `<span class="field-was">WAS ${wasPos}</span>`;
+      else if (wasPos === 'P') wasLabel = `<span class="field-was swap">WAS P</span>`;
+      else if (swapped) wasLabel = `<span class="field-was swap">SWAP FROM ${wasPos}</span>`;
+      else wasLabel = `<span class="field-was">WAS ${wasPos}</span>`;
+    }
+    return `
+      <li class="field-row ${entry.kind}">
+        <div class="field-pos">${entry.position}</div>
+        <div class="field-name">${escape(nameById[entry.id] || '?')}</div>
+        ${wasLabel}
+      </li>
+    `;
+  }
+
+  return `
+    ${pitcherEntry.length ? `
+      <div class="field-section-title">PITCHER</div>
+      <ul class="field-list">${pitcherEntry.map(rowFor).join('')}</ul>
+    ` : ''}
+    ${infieldEntries.length ? `
+      <div class="field-section-title">INFIELD</div>
+      <ul class="field-list">${infieldEntries.map(rowFor).join('')}</ul>
+    ` : ''}
+    ${outfieldEntries.length ? `
+      <div class="field-section-title">OUTFIELD</div>
+      <ul class="field-list">${outfieldEntries.map(rowFor).join('')}</ul>
+    ` : ''}
+    ${prevInning ? `
+      <p style="font-size:11px;color:var(--gray);margin-top:10px;line-height:1.4;">
+        Infield ↔ outfield swaps each inning. Pitcher rotates to a new player. Tap reshuffle if you want different positions within the groups.
+      </p>
+    ` : `
+      <p style="font-size:11px;color:var(--gray);margin-top:10px;line-height:1.4;">
+        Inning 1 is randomized. Next inning, infielders move to outfield and vice versa.
+      </p>
+    `}
+  `;
+}
+
+function viewGame() {
+  if (!state.game) return '';
+  const g = state.game;
+  const len = g.lineup.length;
+  const cur = g.lineup[g.currentIndex];
+  const onDeck = g.lineup[(g.currentIndex + 1) % len];
+  const inHole = g.lineup[(g.currentIndex + 2) % len];
+  const ctx = g.opponent ? `<div class="game-context">VS ${escape(g.opponent.toUpperCase())}${g.gameDate ? ' · ' + escape(formatGameDate(g.gameDate, '')) : ''}</div>` : '';
+
+  return `
+    <div class="view">
+      ${ctx}
+      <div class="scoreboard">
+        <div class="sb-header">
+          <span class="sb-label">⚾ NOW BATTING</span>
+          <span class="sb-inning">INNING ${g.inning}</span>
+        </div>
+        <div class="sb-position">
+          <div class="sb-position-num">${g.currentIndex + 1}</div>
+        </div>
+        <div class="sb-name">${escape(cur.name)}</div>
+        <div class="sb-meta">BATTER ${g.currentIndex + 1} OF ${len}</div>
+      </div>
+
+      <div class="next-cards">
+        <div class="next-card deck">
+          <div class="next-label">ON DECK</div>
+          <div class="next-name">${escape(onDeck.name)}</div>
+        </div>
+        <div class="next-card hole">
+          <div class="next-label">IN THE HOLE</div>
+          <div class="next-name">${escape(inHole.name)}</div>
+        </div>
+      </div>
+
+      <button class="btn btn-next-batter" data-action="next-batter">▶ NEXT BATTER</button>
+
+      <div class="game-controls" style="margin-top:14px;">
+        <button class="btn btn-ghost" data-action="prev-batter">◀ PREVIOUS</button>
+        <button class="btn btn-ghost" data-action="prev-inning">− INNING</button>
+      </div>
+      <div class="game-controls">
+        <button class="btn btn-primary" data-action="next-inning">+ END INNING</button>
+        <button class="btn btn-danger" data-action="end-game">END GAME</button>
+      </div>
+
+      <div class="footer-stats">
+        <div>
+          <div class="stat-label">INNING</div>
+          <div class="stat-value">${g.inning}</div>
+        </div>
+        <div>
+          <div class="stat-label">AT BATS</div>
+          <div class="stat-value">${g.atBatCount}</div>
+        </div>
+        <div>
+          <div class="stat-label">LINEUP</div>
+          <div class="stat-value">${len}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          Field Positions
+          <button class="btn-small btn btn-ghost" data-action="reshuffle-fielding" style="font-size:11px;padding:6px 12px;letter-spacing:1px;">🎲 RESHUFFLE</button>
+        </div>
+        ${renderFieldingForCurrentInning(g)}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Full Order</div>
+        <ul class="lineup-list">
+          ${g.lineup.map((p, i) => {
+            const cls = i === g.currentIndex ? 'current' : (i === (g.currentIndex + 1) % len ? 'upcoming' : '');
+            const tag = i === g.currentIndex ? 'AT BAT' : (i === (g.currentIndex + 1) % len ? 'ON DECK' : '');
+            return `
+              <li class="lineup-item ${cls}">
+                <div class="lineup-num">${i + 1}</div>
+                <div class="lineup-name">${escape(p.name)}</div>
+                ${tag ? `<div class="lineup-tag">${tag}</div>` : ''}
+              </li>
+            `;
+          }).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+// ============ RENDER ============
+function updateHeaderBranding() {
+  const team = getActiveTeam();
+  const theme = team ? (MLB_THEMES[team.mlbTeam] || MLB_THEMES.mlb) : MLB_THEMES.mlb;
+  const mark = document.getElementById('brand-mark');
+  const city = document.getElementById('brand-city');
+  const mascot = document.getElementById('brand-mascot');
+  if (mark) mark.textContent = theme.abbr;
+  if (city) city.textContent = theme.city.toUpperCase();
+  // Show team's custom name (often the mascot) plus "LINEUP"
+  if (mascot) mascot.textContent = `${(team ? team.name : theme.mascot).toUpperCase()} · LINEUP`;
+}
+
+function render() {
+  const root = document.getElementById('app');
+  const back = document.getElementById('back-btn');
+
+  // Apply theme on every render (cheap; ensures correctness after switches)
+  const team = getActiveTeam();
+  if (team) applyTheme(team.mlbTeam);
+  updateHeaderBranding();
+
+  let html = '';
+  if (state.view === 'team-setup') html = viewTeamSetup();
+  else if (state.view === 'team-manage') html = viewTeamManage();
+  else if (state.view === 'home') html = viewHome();
+  else if (state.view === 'attendance') html = viewAttendance();
+  else if (state.view === 'lineup') html = viewLineup();
+  else if (state.view === 'game') html = viewGame();
+
+  root.innerHTML = html;
+
+  // Back button visibility - hide on home and the "first" team setup
+  const onFirstSetup = state.view === 'team-setup' && state.ui.teamSetupMode === 'first';
+  back.style.display = (state.view === 'home' || onFirstSetup) ? 'none' : 'inline-block';
+
+  bindEvents();
+}
+
+function bindEvents() {
+  // Brand button → team manager (or first-time setup)
+  const brandBtn = document.getElementById('brand-btn');
+  if (brandBtn) {
+    brandBtn.onclick = () => {
+      if (state.teams.length === 0) {
+        state.view = 'team-setup';
+        state.ui.teamSetupMode = 'first';
+      } else {
+        state.view = 'team-manage';
+      }
+      render();
+    };
+  }
+
+  // Back
+  document.getElementById('back-btn').onclick = () => {
+    if (state.view === 'attendance') {
+      state.ui.pendingScheduleStart = null;
+      state.view = 'home';
+    }
+    else if (state.view === 'lineup') state.view = 'attendance';
+    else if (state.view === 'game') state.view = 'lineup';
+    else if (state.view === 'team-manage') state.view = 'home';
+    else if (state.view === 'team-setup') {
+      // Only allow back from add-team setup, not first-time
+      if (state.ui.teamSetupMode === 'add') {
+        state.view = 'team-manage';
+        state.ui.teamSetupMode = null;
+      }
+    }
+    render();
+  };
+
+  // Team setup name input
+  const setupName = document.getElementById('setup-team-name');
+  if (setupName) {
+    setupName.addEventListener('input', (e) => {
+      state.ui.teamSetupName = e.target.value;
+    });
+  }
+
+  // Add player input - Enter key
+  const input = document.getElementById('new-player-input');
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        addPlayer(input.value);
+        input.value = '';
+      }
+    });
+  }
+
+  // Roster image upload
+  const fileInput = document.getElementById('roster-image');
+  if (fileInput) {
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      state.ui.uploading = true;
+      state.ui.uploadProgress = 0;
+      state.ui.uploadPhase = 'preparing';
+      state.ui.uploadError = null;
+      render();
+      try {
+        const names = await extractRosterFromImage(file, (pct, phase) => {
+          if (phase) state.ui.uploadPhase = phase;
+          if (typeof pct === 'number') state.ui.uploadProgress = pct;
+          // Re-render on phase changes and at 10% intervals
+          if (phase || pct === 0 || pct % 10 === 0) render();
+        });
+        if (names.length === 0) {
+          state.ui.uploadError = 'No names detected. Try a clearer, well-lit photo of the printed roster — or add players manually.';
+        } else {
+          state.ui.extracted = names.map(n => ({ name: n, checked: true }));
+        }
+      } catch (err) {
+        state.ui.uploadError = err.message || String(err);
+        console.error('OCR error:', err);
+      } finally {
+        state.ui.uploading = false;
+        state.ui.uploadProgress = null;
+        state.ui.uploadPhase = null;
+        // Reset file input so picking the same file again triggers change
+        try { fileInput.value = ''; } catch (e) {}
+        render();
+      }
+    });
+  }
+
+  // Action delegation
+  document.querySelectorAll('[data-action]').forEach(el => {
+    const action = el.getAttribute('data-action');
+    el.addEventListener('click', (e) => handleAction(action, el, e));
+  });
+
+  // Extracted names editing
+  document.querySelectorAll('[data-extracted-check]').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const i = +cb.getAttribute('data-extracted-check');
+      state.ui.extracted[i].checked = cb.checked;
+    });
+  });
+  document.querySelectorAll('[data-extracted-name]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const i = +input.getAttribute('data-extracted-name');
+      state.ui.extracted[i].name = input.value;
+    });
+  });
+}
+
+function handleAction(action, el, e) {
+  if (action === 'add-player') {
+    const inp = document.getElementById('new-player-input');
+    if (inp) { addPlayer(inp.value); inp.value = ''; }
+  } else if (action === 'remove-player') {
+    removePlayer(el.getAttribute('data-id'));
+  } else if (action === 'toggle-attend') {
+    toggleAttend(el.getAttribute('data-id'));
+  } else if (action === 'all-on') {
+    setAllAttending(true);
+  } else if (action === 'all-off') {
+    setAllAttending(false);
+  } else if (action === 'start-attendance') {
+    state.ui.pendingScheduleStart = null;
+    state.roster.forEach(p => { if (p.attending === undefined) p.attending = true; });
+    state.view = 'attendance';
+    render();
+  } else if (action === 'generate-lineup') {
+    generateLineup();
+  } else if (action === 'reshuffle') {
+    reshuffle();
+  } else if (action === 'start-game') {
+    startGame();
+  } else if (action === 'next-batter') {
+    nextBatter();
+  } else if (action === 'prev-batter') {
+    prevBatter();
+  } else if (action === 'next-inning') {
+    nextInning();
+  } else if (action === 'prev-inning') {
+    prevInning();
+  } else if (action === 'reshuffle-fielding') {
+    reshuffleCurrentInningFielding();
+  } else if (action === 'end-game') {
+    endGame();
+  } else if (action === 'resume') {
+    state.view = 'game';
+    render();
+  } else if (action === 'save-extracted') {
+    const toAdd = state.ui.extracted.filter(x => x.checked && x.name.trim());
+    toAdd.forEach(x => state.roster.push({ id: uid(), name: x.name.trim(), attending: true }));
+    state.ui.extracted = null;
+    saveRoster();
+    render();
+  } else if (action === 'cancel-extracted') {
+    state.ui.extracted = null;
+    render();
+  } else if (action === 'add-game') {
+    state.ui.editingGameId = 'new';
+    render();
+  } else if (action === 'edit-game') {
+    state.ui.editingGameId = el.getAttribute('data-id');
+    render();
+  } else if (action === 'cancel-game-form') {
+    state.ui.editingGameId = null;
+    render();
+  } else if (action === 'save-game') {
+    const date = (document.getElementById('form-date') || {}).value || '';
+    const time = (document.getElementById('form-time') || {}).value || '';
+    const opponent = (document.getElementById('form-opponent') || {}).value || '';
+    const location = (document.getElementById('form-location') || {}).value || '';
+    if (!date || !opponent.trim()) {
+      alert('Please enter at least a date and opponent.');
+      return;
+    }
+    saveGameEntry({ id: el.getAttribute('data-id'), date, time, opponent, location });
+  } else if (action === 'remove-game') {
+    removeScheduledGame(el.getAttribute('data-id'));
+  } else if (action === 'start-scheduled') {
+    if (state.game) {
+      if (!confirm('A game is already in progress. Starting a new one will discard it. Continue?')) return;
+      state.game = null;
+      saveGame();
+    }
+    startScheduledGame(el.getAttribute('data-id'));
+  } else if (action === 'pick-mlb') {
+    const key = el.getAttribute('data-key');
+    if (state.view === 'team-setup') {
+      state.ui.teamSetupChoice = key;
+      // If user hasn't typed a custom name, suggest the mascot
+      const nameInput = document.getElementById('setup-team-name');
+      const currentName = nameInput ? nameInput.value : state.ui.teamSetupName;
+      // Update suggested name only if it matches a previous mascot suggestion
+      const wasSuggested = Object.values(MLB_THEMES).some(t => t.mascot === currentName);
+      if (!currentName || wasSuggested) {
+        state.ui.teamSetupName = MLB_THEMES[key].mascot;
+      }
+      render();
+    } else if (state.view === 'team-manage' && state.ui.editingTeamId) {
+      // Apply theme to the team being edited
+      const teamId = state.ui.editingTeamId;
+      const nameInput = document.getElementById('edit-team-name-' + teamId);
+      const newName = nameInput ? nameInput.value : undefined;
+      updateTeamTheme(teamId, key, newName);
+    }
+  } else if (action === 'confirm-team-setup') {
+    const nameInput = document.getElementById('setup-team-name');
+    const name = nameInput ? nameInput.value : state.ui.teamSetupName;
+    const choice = state.ui.teamSetupChoice || 'mlb';
+    if (choice === 'mlb') {
+      alert('Please pick an MLB team theme above.');
+      return;
+    }
+    if (!name || !name.trim()) {
+      alert('Please give your team a name.');
+      return;
+    }
+    createTeam(name, choice);
+  } else if (action === 'cancel-team-setup') {
+    state.ui.teamSetupMode = null;
+    state.ui.teamSetupName = '';
+    state.view = state.teams.length > 0 ? 'team-manage' : 'home';
+    render();
+  } else if (action === 'add-new-team') {
+    state.ui.teamSetupMode = 'add';
+    state.ui.teamSetupChoice = 'mlb';
+    state.ui.teamSetupName = '';
+    state.view = 'team-setup';
+    render();
+  } else if (action === 'switch-team') {
+    pickTeam(el.getAttribute('data-id'));
+  } else if (action === 'edit-team') {
+    state.ui.editingTeamId = el.getAttribute('data-id');
+    render();
+  } else if (action === 'cancel-team-edit') {
+    state.ui.editingTeamId = null;
+    render();
+  } else if (action === 'save-team-edit') {
+    const teamId = el.getAttribute('data-id');
+    const nameInput = document.getElementById('edit-team-name-' + teamId);
+    if (nameInput) updateTeamTheme(teamId, undefined, nameInput.value);
+  } else if (action === 'delete-team') {
+    deleteTeam(el.getAttribute('data-id'));
+  }
+}
+
+// ============ INIT ============
+(async function init() {
+  await loadFromStorage();
+  // Apply theme based on active team (or generic MLB if none)
+  const team = getActiveTeam();
+  applyTheme(team ? team.mlbTeam : 'mlb');
+  // ensure attending defaults
+  state.roster.forEach(p => { if (p.attending === undefined) p.attending = true; });
+  // No teams yet → first run team setup
+  if (state.teams.length === 0) {
+    state.view = 'team-setup';
+    state.ui.teamSetupMode = 'first';
+    state.ui.teamSetupChoice = 'mlb';
+    state.ui.teamSetupName = '';
+  }
+  render();
+})();
+</script>
+</body>
+</html>
