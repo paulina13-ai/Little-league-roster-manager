@@ -1881,9 +1881,9 @@ function balanceCatchers(infieldIds, outfieldIds, canCatchSet) {
   }
 }
 
-// Split field players into infield/outfield for strict mode: up to 5 infield, up to 4 outfield.
+// Split field players into infield/outfield for strict mode: up to 4 infield, up to 4 outfield.
 function splitFieldStrict(fieldIds) {
-  const maxIF = 5, maxOF = 4;
+  const maxIF = 4, maxOF = 4;
   const infieldIds = fieldIds.slice(0, Math.min(fieldIds.length, maxIF));
   const outfieldIds = fieldIds.slice(maxIF, maxIF + maxOF);
   return { infieldIds, outfieldIds };
@@ -1925,7 +1925,7 @@ function enforceCatcherOn1B(inning, lineup) {
 // Build inning 1 from scratch. Pitcher is picked by jersey-number rotation
 // (continuing from `lastPitcherNumber` carried over from the previous game,
 // or starting fresh if this is the first game). Field is split roughly 50/50.
-// everyoneFields=false caps the field at 10 (5 infield + 4 outfield) and benches the rest.
+// everyoneFields=false caps the field at 9 (4 infield + 4 outfield + pitcher) and benches the rest.
 function generateInitialFielding(lineup, lastPitcherNumber, everyoneFields = true) {
   if (!lineup || lineup.length === 0) return null;
   const playerIds = lineup.map(p => p.id);
@@ -1944,8 +1944,8 @@ function generateInitialFielding(lineup, lastPitcherNumber, everyoneFields = tru
     return { pitchedIds: [pitcherId], innings: [inning] };
   }
 
-  // Strict mode: max 5 infield + 4 outfield = 9 non-pitcher fielders (10 total)
-  const maxNonPitcherField = 9;
+  // Strict mode: max 4 infield + 4 outfield = 8 non-pitcher fielders (9 total with pitcher)
+  const maxNonPitcherField = 8;
   const B = Math.max(0, nonPitcherIds.length - maxNonPitcherField);
   const benchIds = nonPitcherIds.slice(0, B);
   const fieldIds = nonPitcherIds.slice(B);
@@ -1978,7 +1978,7 @@ function generateNextInning(fielding, lineup, everyoneFields = true) {
   if (!everyoneFields) {
     // Strict bench-rotation mode
     const playerIds = lineup.map(p => p.id);
-    const B = Math.max(0, playerIds.length - 10); // 10 = 1P + 5IF + 4OF
+    const B = Math.max(0, playerIds.length - 9); // 9 = 1P + 4IF + 4OF
 
     // Advance bench queue: remove current pitcher, take first B as bench, rotate
     let queue = (fielding.benchQueue || []).filter(id => playerIds.includes(id));
@@ -2311,7 +2311,7 @@ function addLateArrival(rosterId) {
   if (!ef) {
     // Strict mode: bench the late arrival if field is already at capacity
     const fieldCount = Object.values(inning.assignments).filter(p => p !== 'P').length;
-    if (fieldCount >= 9) {
+    if (fieldCount >= 8) {
       // Field is full — put them on bench
       if (!inning.benchIds) inning.benchIds = [];
       inning.benchIds.push(player.id);
