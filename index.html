@@ -1011,6 +1011,8 @@
     border-left: 3px solid var(--gold);
   }
   .field-row.outfield { border-left: 3px solid var(--gold-deep); }
+  .field-row.bench { opacity: 0.55; }
+  .field-row.bench .field-pos { color: var(--gray); font-size: 12px; letter-spacing: 0; }
   .field-pos {
     width: 52px;
     flex-shrink: 0;
@@ -1379,6 +1381,7 @@ const state = {
     confirmEndGame: false,  // two-step end-game confirmation flag
     showLateArrival: false, // toggles late-arrival picker on game screen
     menuOpen: false,        // header dropdown menu open/close
+    everyoneFields: true,   // if false, cap at 10 fielders (5 IF + 4 OF) and rotate bench
     pendingConfirm: null,   // {type, id} for inline two-tap confirmations
   },
 };
@@ -1634,23 +1637,43 @@ function pickNextPitcherByNumber(lineup, lastPitcherNumber, alreadyPitchedThisGa
   return next ? next.id : null;
 }
 
+// Split field players into infield/outfield for strict mode: up to 5 infield, up to 4 outfield.
+function splitFieldStrict(fieldIds) {
+  const maxIF = 5, maxOF = 4;
+  const infieldIds = fieldIds.slice(0, Math.min(fieldIds.length, maxIF));
+  const outfieldIds = fieldIds.slice(maxIF, maxIF + maxOF);
+  return { infieldIds, outfieldIds };
+}
+
 // Build inning 1 from scratch. Pitcher is picked by jersey-number rotation
 // (continuing from `lastPitcherNumber` carried over from the previous game,
 // or starting fresh if this is the first game). Field is split roughly 50/50.
-function generateInitialFielding(lineup, lastPitcherNumber) {
+// everyoneFields=false caps the field at 10 (5 infield + 4 outfield) and benches the rest.
+function generateInitialFielding(lineup, lastPitcherNumber, everyoneFields = true) {
   if (!lineup || lineup.length === 0) return null;
   const playerIds = lineup.map(p => p.id);
   const pitcherId = pickNextPitcherByNumber(lineup, lastPitcherNumber, new Set());
-  const fieldIds = shuffle(playerIds.filter(id => id !== pitcherId));
-  // Roughly even split — infield gets the extra on odd counts
-  const infieldCount = Math.ceil(fieldIds.length / 2);
-  const infieldIds = fieldIds.slice(0, infieldCount);
-  const outfieldIds = fieldIds.slice(infieldCount);
-  const inning = buildInningAssignments(infieldIds, outfieldIds, pitcherId);
-  return {
-    pitchedIds: [pitcherId],
-    innings: [inning],
-  };
+  const nonPitcherIds = shuffle(playerIds.filter(id => id !== pitcherId));
+
+  if (everyoneFields) {
+    // Roughly even split — infield gets the extra on odd counts
+    const infieldCount = Math.ceil(nonPitcherIds.length / 2);
+    const infieldIds = nonPitcherIds.slice(0, infieldCount);
+    const outfieldIds = nonPitcherIds.slice(infieldCount);
+    const inning = buildInningAssignments(infieldIds, outfieldIds, pitcherId);
+    return { pitchedIds: [pitcherId], innings: [inning] };
+  }
+
+  // Strict mode: max 5 infield + 4 outfield = 9 non-pitcher fielders (10 total)
+  const maxNonPitcherField = 9;
+  const B = Math.max(0, nonPitcherIds.length - maxNonPitcherField);
+  const benchIds = nonPitcherIds.slice(0, B);
+  const fieldIds = nonPitcherIds.slice(B);
+  const { infieldIds, outfieldIds } = splitFieldStrict(fieldIds);
+  const inning = { ...buildInningAssignments(infieldIds, outfieldIds, pitcherId), benchIds };
+  // benchQueue: field players first (most due for bench next), then bench (just sat), then pitcher last
+  const benchQueue = [...fieldIds, ...benchIds, pitcherId];
+  return { pitchedIds: [pitcherId], innings: [inning], benchQueue };
 }
 
 // Build the next inning's assignments.
@@ -1658,10 +1681,43 @@ function generateInitialFielding(lineup, lastPitcherNumber) {
 // - Previous pitcher rejoins the field on whichever side is smaller
 // - Everyone who was infield last inning swaps to outfield (and vice versa),
 //   EXCEPT the new pitcher gets pulled out of whichever side they were on
-function generateNextInning(fielding, lineup) {
+// everyoneFields=false uses bench rotation instead of the swap rule.
+function generateNextInning(fielding, lineup, everyoneFields = true) {
   if (!fielding || fielding.innings.length === 0) {
-    return generateInitialFielding(lineup);
+    return generateInitialFielding(lineup, null, everyoneFields);
   }
+
+  // Find this inning's pitcher: next in number rotation, skipping kids who already pitched
+  const lastPitcherId = fielding.pitchedIds[fielding.pitchedIds.length - 1];
+  const lastPitcher = lineup.find(p => p.id === lastPitcherId);
+  const lastPitcherNumber = lastPitcher ? lastPitcher.number : null;
+  const nextPitcherId = pickNextPitcherByNumber(lineup, lastPitcherNumber, new Set(fielding.pitchedIds));
+
+  if (!everyoneFields) {
+    // Strict bench-rotation mode
+    const playerIds = lineup.map(p => p.id);
+    const B = Math.max(0, playerIds.length - 10); // 10 = 1P + 5IF + 4OF
+
+    // Advance bench queue: remove current pitcher, take first B as bench, rotate
+    let queue = (fielding.benchQueue || []).filter(id => playerIds.includes(id));
+    // Add any new players (late arrivals) at the end
+    playerIds.forEach(id => { if (!queue.includes(id)) queue.push(id); });
+    // Remove new pitcher temporarily
+    const queueNoPitcher = queue.filter(id => id !== nextPitcherId);
+    const benchIds = queueNoPitcher.slice(0, B);
+    const fieldIds = queueNoPitcher.slice(B);
+    // Rotate: fielders first (most due for bench), then bench (just sat), then pitcher last
+    const newBenchQueue = [...fieldIds, ...benchIds, nextPitcherId];
+
+    const { infieldIds, outfieldIds } = splitFieldStrict(shuffle(fieldIds));
+    const inning = { ...buildInningAssignments(infieldIds, outfieldIds, nextPitcherId), benchIds };
+    return {
+      pitchedIds: fielding.pitchedIds.concat(nextPitcherId),
+      innings: fielding.innings.concat(inning),
+      benchQueue: newBenchQueue,
+    };
+  }
+
   const playerIds = lineup.map(p => p.id);
   const prev = fielding.innings[fielding.innings.length - 1];
   const prevAssign = prev.assignments;
@@ -1676,12 +1732,6 @@ function generateNextInning(fielding, lineup) {
     else if (OUTFIELD_POSITIONS.includes(pos)) wasOutfield.push(id);
     else newPlayers.push(id);
   });
-
-  // Find this inning's pitcher: next in number rotation, skipping kids who already pitched
-  const lastPitcherId = fielding.pitchedIds[fielding.pitchedIds.length - 1];
-  const lastPitcher = lineup.find(p => p.id === lastPitcherId);
-  const lastPitcherNumber = lastPitcher ? lastPitcher.number : null;
-  const nextPitcherId = pickNextPitcherByNumber(lineup, lastPitcherNumber, new Set(fielding.pitchedIds));
 
   // Swap sides: was-infield → outfield this inning; was-outfield → infield
   let nextInfield = wasOutfield.slice();
@@ -1715,11 +1765,12 @@ function generateNextInning(fielding, lineup) {
 // Get the assignments for a given inning index, generating any innings up to that
 // index if they don't exist yet.
 function ensureFieldingForInning(game, inningIdx) {
+  const ef = game.everyoneFields !== false; // default true
   if (!game.fielding) {
-    game.fielding = generateInitialFielding(game.lineup, game.startingPitcherNumber);
+    game.fielding = generateInitialFielding(game.lineup, game.startingPitcherNumber, ef);
   }
   while (game.fielding.innings.length <= inningIdx) {
-    game.fielding = generateNextInning(game.fielding, game.lineup);
+    game.fielding = generateNextInning(game.fielding, game.lineup, ef);
   }
   return game.fielding.innings[inningIdx];
 }
@@ -1808,6 +1859,7 @@ function generateLineup() {
     atBatCount: 0,
     fielding: null,
     startingPitcherNumber, // tracks the cross-game pitcher rotation seed
+    everyoneFields: state.ui.everyoneFields !== false,
   };
   ensureFieldingForInning(state.game, 0);
   saveGame();
@@ -1900,19 +1952,46 @@ function addLateArrival(rosterId) {
   const inningIdx = state.game.inning - 1;
   ensureFieldingForInning(state.game, inningIdx);
   const inning = state.game.fielding.innings[inningIdx];
-  // Count current infield vs outfield kids (excluding pitcher)
-  let infieldCount = 0, outfieldCount = 0;
-  Object.entries(inning.assignments).forEach(([id, pos]) => {
-    if (pos === 'P') return;
-    if (INFIELD_POSITIONS.includes(pos)) infieldCount++;
-    else if (OUTFIELD_POSITIONS.includes(pos)) outfieldCount++;
-  });
-  // Put them on the side with fewer kids (balance the split).
-  // On a tie, prefer outfield since infield has 4 spots vs outfield's 3.
-  const goesInfield = infieldCount < outfieldCount;
-  const positions = goesInfield ? INFIELD_POSITIONS : OUTFIELD_POSITIONS;
-  const pickedPosition = shuffle(positions)[0];
-  inning.assignments[player.id] = pickedPosition;
+
+  const ef = state.game.everyoneFields !== false;
+  if (!ef) {
+    // Strict mode: bench the late arrival if field is already at capacity
+    const fieldCount = Object.values(inning.assignments).filter(p => p !== 'P').length;
+    if (fieldCount >= 9) {
+      // Field is full — put them on bench
+      if (!inning.benchIds) inning.benchIds = [];
+      inning.benchIds.push(player.id);
+      // Add to bench queue so they rotate onto field next inning
+      if (state.game.fielding.benchQueue) {
+        state.game.fielding.benchQueue.unshift(player.id);
+      }
+    } else {
+      // Room on field — add normally
+      const { infieldIds: curIF, outfieldIds: curOF } = (() => {
+        const i = [], o = [];
+        Object.entries(inning.assignments).forEach(([id, pos]) => {
+          if (pos === 'P') return;
+          if (INFIELD_POSITIONS.includes(pos)) i.push(id);
+          else if (OUTFIELD_POSITIONS.includes(pos)) o.push(id);
+        });
+        return { infieldIds: i, outfieldIds: o };
+      })();
+      const goesInfield = curIF.length < 5 && curIF.length <= curOF.length;
+      const positions = goesInfield ? INFIELD_POSITIONS : OUTFIELD_POSITIONS;
+      inning.assignments[player.id] = shuffle(positions)[0];
+    }
+  } else {
+    // Everyone-fields mode: slot onto smaller side as before
+    let infieldCount = 0, outfieldCount = 0;
+    Object.entries(inning.assignments).forEach(([id, pos]) => {
+      if (pos === 'P') return;
+      if (INFIELD_POSITIONS.includes(pos)) infieldCount++;
+      else if (OUTFIELD_POSITIONS.includes(pos)) outfieldCount++;
+    });
+    const goesInfield = infieldCount < outfieldCount;
+    const positions = goesInfield ? INFIELD_POSITIONS : OUTFIELD_POSITIONS;
+    inning.assignments[player.id] = shuffle(positions)[0];
+  }
 
   // Drop any pre-generated future innings since the player set changed —
   // next inning will be re-derived correctly from the updated current inning.
@@ -1975,7 +2054,10 @@ function reshuffleCurrentInningFielding() {
     if (INFIELD_POSITIONS.includes(pos)) infieldIds.push(id);
     else if (OUTFIELD_POSITIONS.includes(pos)) outfieldIds.push(id);
   });
-  state.game.fielding.innings[inningIdx] = buildInningAssignments(infieldIds, outfieldIds, inning.pitcherId);
+  const newInning = buildInningAssignments(infieldIds, outfieldIds, inning.pitcherId);
+  // Preserve bench players in strict mode
+  if (inning.benchIds) newInning.benchIds = inning.benchIds;
+  state.game.fielding.innings[inningIdx] = newInning;
   // Drop pre-generated future innings since this inning's layout shifted
   state.game.fielding.innings = state.game.fielding.innings.slice(0, inningIdx + 1);
   saveGame();
@@ -2412,6 +2494,15 @@ function viewAttendance() {
         `).join('')}
       </ul>
 
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Everyone Fields?</div>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:12px;">If the other team plays by the book, turn this off — bench kids rotate each inning so everyone gets equal time.</p>
+        <div class="home-away-toggle">
+          <button class="ha-btn ${state.ui.everyoneFields !== false ? 'active' : ''}" data-action="set-everyone-fields-on">✅ YES<br><span>All kids field</span></button>
+          <button class="ha-btn ${state.ui.everyoneFields === false ? 'active' : ''}" data-action="set-everyone-fields-off">🪑 NO<br><span>Bench rotation</span></button>
+        </div>
+      </div>
+
       <div class="btn-stack">
         <button class="btn btn-gold" data-action="generate-lineup" ${present === 0 ? 'disabled style="opacity:0.5;"' : ''}>⚾ GENERATE BATTING ORDER</button>
       </div>
@@ -2481,7 +2572,7 @@ function renderFieldingForCurrentInning(game) {
   const nameById = Object.fromEntries(game.lineup.map(p => [p.id, p.name]));
   const numById = Object.fromEntries(game.lineup.map(p => [p.id, p.number]));
 
-  // Group rendering: pitcher → infield → outfield
+  // Group rendering: pitcher → infield → outfield → bench
   const pitcherEntry = inning.pitcherId
     ? [{ id: inning.pitcherId, position: 'P', kind: 'pitcher' }]
     : [];
@@ -2492,6 +2583,7 @@ function renderFieldingForCurrentInning(game) {
     if (INFIELD_POSITIONS.includes(pos)) infieldEntries.push({ id, position: pos, kind: 'infield' });
     else if (OUTFIELD_POSITIONS.includes(pos)) outfieldEntries.push({ id, position: pos, kind: 'outfield' });
   });
+  const benchEntries = (inning.benchIds || []).map(id => ({ id, position: 'BENCH', kind: 'bench' }));
 
   // Sort by position name within each group for stable display
   const posOrder = pos => [...INFIELD_POSITIONS, ...OUTFIELD_POSITIONS].indexOf(pos);
@@ -2500,14 +2592,18 @@ function renderFieldingForCurrentInning(game) {
 
   function rowFor(entry) {
     const wasPos = prevInning ? prevInning.assignments[entry.id] : null;
+    const wasBench = prevInning ? (prevInning.benchIds || []).includes(entry.id) : false;
     let wasLabel = '';
-    if (wasPos) {
+    if (wasBench && entry.kind !== 'bench') {
+      wasLabel = `<span class="field-was swap">WAS BENCH</span>`;
+    } else if (wasPos) {
       const wasInfield = INFIELD_POSITIONS.includes(wasPos);
       const wasOutfield = OUTFIELD_POSITIONS.includes(wasPos);
       const nowInfield = entry.kind === 'infield';
       const nowOutfield = entry.kind === 'outfield';
       const swapped = (wasInfield && nowOutfield) || (wasOutfield && nowInfield);
       if (entry.kind === 'pitcher') wasLabel = `<span class="field-was">WAS ${wasPos}</span>`;
+      else if (entry.kind === 'bench') wasLabel = `<span class="field-was">WAS ${wasPos}</span>`;
       else if (wasPos === 'P') wasLabel = `<span class="field-was swap">WAS P</span>`;
       else if (swapped) wasLabel = `<span class="field-was swap">SWAP FROM ${wasPos}</span>`;
       else wasLabel = `<span class="field-was">WAS ${wasPos}</span>`;
@@ -2521,6 +2617,7 @@ function renderFieldingForCurrentInning(game) {
     `;
   }
 
+  const hasBench = benchEntries.length > 0;
   return `
     ${pitcherEntry.length ? `
       <div class="field-section-title">PITCHER</div>
@@ -2534,13 +2631,17 @@ function renderFieldingForCurrentInning(game) {
       <div class="field-section-title">OUTFIELD</div>
       <ul class="field-list">${outfieldEntries.map(rowFor).join('')}</ul>
     ` : ''}
+    ${hasBench ? `
+      <div class="field-section-title" style="color:var(--gray);">BENCH</div>
+      <ul class="field-list">${benchEntries.map(rowFor).join('')}</ul>
+    ` : ''}
     ${prevInning ? `
       <p style="font-size:11px;color:var(--gray);margin-top:10px;line-height:1.4;">
-        Infield ↔ outfield swaps each inning. Pitcher rotates to a new player. Tap reshuffle if you want different positions within the groups.
+        ${hasBench ? 'Bench rotates each inning so everyone gets equal time. ' : 'Infield ↔ outfield swaps each inning. '}Pitcher rotates to a new player. Tap reshuffle if you want different positions within the groups.
       </p>
     ` : `
       <p style="font-size:11px;color:var(--gray);margin-top:10px;line-height:1.4;">
-        Inning 1 is randomized. Next inning, infielders move to outfield and vice versa.
+        ${hasBench ? 'Bench rotates each inning — different kids sit each time.' : 'Inning 1 is randomized. Next inning, infielders move to outfield and vice versa.'}
       </p>
     `}
   `;
@@ -2928,6 +3029,12 @@ function handleAction(action, el, e) {
     setAllAttending(true);
   } else if (action === 'all-off') {
     setAllAttending(false);
+  } else if (action === 'set-everyone-fields-on') {
+    state.ui.everyoneFields = true;
+    render();
+  } else if (action === 'set-everyone-fields-off') {
+    state.ui.everyoneFields = false;
+    render();
   } else if (action === 'generate-lineup') {
     generateLineup();
   } else if (action === 'reshuffle') {
