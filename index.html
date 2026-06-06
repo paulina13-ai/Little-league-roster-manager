@@ -1352,6 +1352,12 @@
   <main class="main" id="app"></main>
 </div>
 
+<!-- Firebase SDK (compat build) — only used when FIREBASE_CONFIG is filled in.
+     If these fail to load (offline file), the app falls back to local-only mode. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <script>
 // ============ MLB THEMES (all 30 teams + generic MLB default) ============
 const MLB_THEMES = {
@@ -1416,6 +1422,29 @@ function applyTheme(themeKey) {
   root.style.setProperty('--gold-deep', adjustHex(t.accent, -50));
 }
 
+// ============ FIREBASE CONFIG (cross-device sync) ============
+// Paste your Firebase web-app config below to turn on Google sign-in + cloud sync.
+// Get it from: Firebase console → Project settings → Your apps → SDK setup → Config.
+// Leave apiKey blank to keep the app local-only (data stays on this device).
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCMA419i-JlCDknpHkpUnKzBQztYNdQa-M",
+  authDomain: "little-league-manager-bdc0d.firebaseapp.com",
+  projectId: "little-league-manager-bdc0d",
+  storageBucket: "little-league-manager-bdc0d.firebasestorage.app",
+  messagingSenderId: "421620793231",
+  appId: "1:421620793231:web:fccb07655b1a6bcc8bd5fa",
+  measurementId: "G-ZJFNQSW08Y"
+};
+
+// Cloud-sync runtime state. When usingCloud is true, the storage layer reads/writes
+// Firestore (via kvCache) instead of localStorage.
+let db = null;            // Firestore instance (compat)
+let cloudUid = null;      // signed-in user's uid
+let usingCloud = false;   // true once Firebase is configured AND a user is signed in
+let kvCache = {};         // in-memory mirror of the user's cloud key/value docs
+let cloudUnsub = null;    // unsubscribe fn for the live snapshot listener
+let signedInEmail = '';   // shown in the menu
+
 // ============ STATE ============
 const STORAGE_KEYS = {
   // Multi-team keys
@@ -1463,6 +1492,11 @@ function getActiveTheme() {
 // website (GitHub Pages, Netlify, opening the file directly, etc.).
 // All values are JSON-serialized.
 async function safeGet(key) {
+  if (usingCloud) {
+    const v = kvCache[key];
+    // Return a fresh copy so callers can mutate state without touching the cache
+    return (v === undefined || v === null) ? null : JSON.parse(JSON.stringify(v));
+  }
   try {
     const raw = localStorage.getItem(key);
     return raw === null ? null : JSON.parse(raw);
@@ -1472,6 +1506,17 @@ async function safeGet(key) {
   }
 }
 async function safeSet(key, val) {
+  if (usingCloud) {
+    try {
+      const copy = JSON.parse(JSON.stringify(val));
+      kvCache[key] = copy;
+      await kvCol().doc(key).set({ v: copy });
+      return true;
+    } catch (e) {
+      console.error('cloud safeSet failed', key, e);
+      return false;
+    }
+  }
   try {
     localStorage.setItem(key, JSON.stringify(val));
     return true;
@@ -1481,6 +1526,11 @@ async function safeSet(key, val) {
   }
 }
 async function safeDelete(key) {
+  if (usingCloud) {
+    delete kvCache[key];
+    try { await kvCol().doc(key).delete(); } catch (e) { /* ignore */ }
+    return;
+  }
   try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
 }
 
@@ -1491,6 +1541,10 @@ function getTeamRosterSync(teamId) {
   if (!teamId) return [];
   // Use the active team's already-loaded roster when possible (cheaper)
   if (teamId === state.activeTeamId) return state.roster || [];
+  if (usingCloud) {
+    const v = kvCache[STORAGE_KEYS.rosterPrefix + teamId];
+    return Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : [];
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.rosterPrefix + teamId);
     if (!raw) return [];
@@ -1555,6 +1609,104 @@ async function switchActiveTeam(teamId) {
   state.schedule = Array.isArray(s) ? s : [];
   const g = await safeGet(STORAGE_KEYS.gamePrefix + teamId);
   state.game = g || null;
+}
+
+// ============ CLOUD SYNC (Firebase Auth + Firestore) ============
+// When FIREBASE_CONFIG is filled in and the coach signs in with Google, all data
+// lives in Firestore under their account and syncs across devices. Otherwise the
+// app falls back to localStorage exactly as before.
+function initFirebase() {
+  try {
+    if (typeof firebase === 'undefined') return false;
+    if (!FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey) return false;
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    // Offline cache so the app keeps working with no signal, then syncs later
+    db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+    return true;
+  } catch (e) {
+    console.error('Firebase init failed', e);
+    return false;
+  }
+}
+
+// Shortcut to the current user's key/value collection: users/{uid}/kv
+function kvCol() {
+  return db.collection('users').doc(cloudUid).collection('kv');
+}
+
+// Pull the user's data into the cache, migrate any on-device data the first time,
+// then start the live listener and load app state.
+async function enterCloudMode() {
+  kvCache = {};
+  try {
+    const snap = await kvCol().get();
+    snap.forEach(d => { kvCache[d.id] = d.data().v; });
+  } catch (e) { console.error('cloud load failed', e); }
+  // First sign-in with nothing in the cloud → push up whatever is on this device
+  if (kvCache[STORAGE_KEYS.teams] === undefined) {
+    await migrateLocalToCloud();
+  }
+  subscribeCloud();
+  await loadFromStorage();
+}
+
+// One-time upload of existing localStorage data so the coach doesn't lose the
+// roster they already built before turning on sync.
+async function migrateLocalToCloud() {
+  const keys = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf('mlb:') === 0) keys.push(k);
+    }
+  } catch (e) { return; }
+  for (const k of keys) {
+    try {
+      const val = JSON.parse(localStorage.getItem(k));
+      kvCache[k] = val;
+      await kvCol().doc(k).set({ v: val });
+    } catch (e) { /* skip a bad entry */ }
+  }
+}
+
+// Live updates from other devices. We ignore our own pending writes and any
+// server confirmation that already matches the cache, so only genuine remote
+// changes trigger a refresh.
+function subscribeCloud() {
+  if (cloudUnsub) { try { cloudUnsub(); } catch (e) {} }
+  cloudUnsub = kvCol().onSnapshot(snap => {
+    let remoteChange = false;
+    snap.docChanges().forEach(ch => {
+      if (ch.doc.metadata.hasPendingWrites) return; // our own local write
+      const id = ch.doc.id;
+      if (ch.type === 'removed') {
+        if (id in kvCache) { delete kvCache[id]; remoteChange = true; }
+      } else {
+        const nv = ch.doc.data().v;
+        if (JSON.stringify(nv) !== JSON.stringify(kvCache[id])) {
+          kvCache[id] = nv;
+          remoteChange = true;
+        }
+      }
+    });
+    if (remoteChange) loadFromStorage().then(render);
+  }, err => console.error('cloud sync error', err));
+}
+
+function doSignIn() {
+  if (typeof firebase === 'undefined' || !db) return;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider).catch(() => {
+    // Popups are unreliable on phones/iPads — fall back to a full-page redirect
+    try { firebase.auth().signInWithRedirect(provider); } catch (e) {}
+  });
+}
+
+function doSignOut() {
+  if (typeof firebase === 'undefined') return;
+  if (cloudUnsub) { try { cloudUnsub(); } catch (e) {} cloudUnsub = null; }
+  firebase.auth().signOut();
 }
 
 // ============ HELPERS ============
@@ -2627,6 +2779,27 @@ function renderScheduleCard() {
   `;
 }
 
+function viewSignIn() {
+  return `
+    <div class="view">
+      <div class="section-label">⚾ WELCOME, COACH</div>
+      <h1 class="section-title">Sign In to Sync</h1>
+      <p style="font-size:14px;color:var(--gray);margin-bottom:18px;line-height:1.5;">
+        Sign in with Google to keep your teams, rosters, schedules, and games in sync
+        across your laptop, phone, and iPad. Set up at home — pull it up in the dugout.
+      </p>
+      <div class="card">
+        <button class="btn btn-primary" data-action="sign-in-google">🔐 SIGN IN WITH GOOGLE</button>
+        <p style="font-size:12px;color:var(--gray);margin-top:12px;text-align:center;line-height:1.4;">
+          Your data is private to your account. Anything you already set up on this device
+          will be carried over the first time you sign in.
+        </p>
+      </div>
+      <button class="btn btn-ghost btn-small" data-action="use-local-only" style="width:100%;">Use on this device only</button>
+    </div>
+  `;
+}
+
 function viewHome() {
   const hasRoster = state.roster.length > 0;
   const hasGame = !!state.game;
@@ -3101,6 +3274,18 @@ function renderBrandMenu() {
         `;
       }
     }).join('')}
+    ${usingCloud ? `
+      <div class="menu-section">
+        <div class="menu-item" style="cursor:default;">
+          <span class="menu-item-icon">👤</span>
+          <span class="menu-item-label" style="font-size:12px;color:var(--gray);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escape(signedInEmail || 'Signed in')}</span>
+        </div>
+        <button class="menu-item" data-menu-action="sign-out">
+          <span class="menu-item-icon">🚪</span>
+          <span class="menu-item-label">Sign out</span>
+        </button>
+      </div>
+    ` : ''}
   `;
 }
 
@@ -3116,7 +3301,8 @@ function render() {
   updateHeaderBranding();
 
   let html = '';
-  if (state.view === 'team-setup') html = viewTeamSetup();
+  if (state.view === 'signin') html = viewSignIn();
+  else if (state.view === 'team-setup') html = viewTeamSetup();
   else if (state.view === 'team-manage') html = viewTeamManage();
   else if (state.view === 'home') html = viewHome();
   else if (state.view === 'attendance') html = viewAttendance();
@@ -3125,13 +3311,13 @@ function render() {
 
   root.innerHTML = html;
 
-  // Back button visibility - hide on home and the "first" team setup
+  // Back button visibility - hide on home, sign-in, and the "first" team setup
   const onFirstSetup = state.view === 'team-setup' && state.ui.teamSetupMode === 'first';
-  back.style.display = (state.view === 'home' || onFirstSetup) ? 'none' : 'inline-block';
+  back.style.display = (state.view === 'home' || state.view === 'signin' || onFirstSetup) ? 'none' : 'inline-block';
 
   // Header dropdown menu
   if (menu && brandBtn) {
-    if (state.ui.menuOpen && !onFirstSetup) {
+    if (state.ui.menuOpen && !onFirstSetup && state.view !== 'signin') {
       menu.innerHTML = renderBrandMenu();
       menu.style.display = 'block';
       brandBtn.classList.add('open');
@@ -3151,6 +3337,8 @@ function bindEvents() {
   if (brandBtn) {
     brandBtn.onclick = (e) => {
       e.stopPropagation();
+      // On the sign-in screen the menu has nothing to show
+      if (state.view === 'signin') return;
       // First-time team setup: brand button still does nothing useful
       if (state.teams.length === 0) {
         state.view = 'team-setup';
@@ -3184,6 +3372,8 @@ function bindEvents() {
       } else if (act === 'switch') {
         const id = el.getAttribute('data-id');
         pickTeam(id);
+      } else if (act === 'sign-out') {
+        doSignOut();
       }
     });
   });
@@ -3272,7 +3462,12 @@ function handleAction(action, el, e) {
     state.ui.pendingConfirm = null;
     // Don't return — continue processing the new action; render at the end via the normal flow
   }
-  if (action === 'add-player') {
+  if (action === 'sign-in-google') {
+    doSignIn();
+  } else if (action === 'use-local-only') {
+    usingCloud = false;
+    loadFromStorage().then(bootIntoApp);
+  } else if (action === 'add-player') {
     const inp = document.getElementById('new-player-input');
     if (inp) { addPlayer(inp.value); inp.value = ''; }
   } else if (action === 'remove-player') {
@@ -3465,21 +3660,53 @@ function handleAction(action, el, e) {
 }
 
 // ============ INIT ============
-(async function init() {
-  await loadFromStorage();
-  // Apply theme based on active team (or generic MLB if none)
+// Apply theme, set defaults, and route to the first screen once state is loaded.
+function bootIntoApp() {
   const team = getActiveTeam();
   applyTheme(team ? team.mlbTeam : 'mlb');
-  // ensure attending defaults
   state.roster.forEach(p => { if (p.attending === undefined) p.attending = true; });
-  // No teams yet → first run team setup
   if (state.teams.length === 0) {
+    // No teams yet → first-run team setup
     state.view = 'team-setup';
     state.ui.teamSetupMode = 'first';
     state.ui.teamSetupChoice = 'mlb';
     state.ui.teamSetupName = '';
+  } else if (state.view === 'signin') {
+    state.view = 'home';
   }
   render();
+}
+
+(async function init() {
+  const cloudReady = initFirebase();
+  if (cloudReady) {
+    // Cloud mode: auth state drives the app. Show sign-in until a user appears.
+    firebase.auth().onAuthStateChanged(async (user) => {
+      if (user) {
+        cloudUid = user.uid;
+        usingCloud = true;
+        signedInEmail = user.email || '';
+        await enterCloudMode();   // loads state from the cloud (+ first-time migrate)
+        bootIntoApp();
+      } else {
+        // Signed out: drop any in-memory data and show the sign-in screen
+        usingCloud = false;
+        cloudUid = null;
+        signedInEmail = '';
+        state.teams = [];
+        state.roster = [];
+        state.schedule = [];
+        state.game = null;
+        state.activeTeamId = null;
+        state.view = 'signin';
+        render();
+      }
+    });
+  } else {
+    // Local-only mode (no Firebase configured) — original behavior
+    await loadFromStorage();
+    bootIntoApp();
+  }
 })();
 </script>
 </body>
