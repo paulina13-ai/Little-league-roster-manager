@@ -1044,6 +1044,69 @@
     border: 1px solid var(--cream-dark);
   }
   .field-was.swap { color: var(--gold-deep); border-color: var(--gold); }
+  .catch-ball { font-size: 13px; }
+
+  /* ===== CAN-CATCH TOGGLE (roster editor) ===== */
+  .catch-toggle {
+    background: var(--white);
+    border: 1px solid var(--cream-dark);
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 15px;
+    flex-shrink: 0;
+    opacity: 0.35;
+    filter: grayscale(1);
+    transition: all 0.15s;
+  }
+  .catch-toggle.on {
+    opacity: 1;
+    filter: none;
+    border-color: var(--gold);
+    background: rgba(189, 155, 96, 0.15);
+  }
+
+  /* ===== CATCHER-ON-1B PROMPT (fielding card) ===== */
+  .catcher-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: rgba(189, 155, 96, 0.08);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .catcher-row-title {
+    font-family: 'Bebas Neue';
+    font-size: 15px;
+    letter-spacing: 1px;
+    color: var(--dark-blue);
+  }
+  .catcher-row-sub {
+    font-size: 11px;
+    color: var(--gray);
+    margin-top: 2px;
+  }
+  .catcher-toggle-group { display: flex; gap: 4px; flex-shrink: 0; }
+  .catcher-mini {
+    background: var(--white);
+    border: 2px solid var(--cream-dark);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: 'Bebas Neue';
+    font-size: 14px;
+    letter-spacing: 1px;
+    color: var(--dark-blue);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .catcher-mini.active {
+    background: linear-gradient(180deg, var(--royal-blue), var(--dark-blue));
+    border-color: var(--gold);
+    color: var(--white);
+  }
 
   /* ===== HOME / AWAY TOGGLE ===== */
   .home-away-toggle {
@@ -1382,6 +1445,7 @@ const state = {
     showLateArrival: false, // toggles late-arrival picker on game screen
     menuOpen: false,        // header dropdown menu open/close
     everyoneFields: true,   // if false, cap at 10 fielders (5 IF + 4 OF) and rotate bench
+    catcherPickFor1B: false,// shows the "pick who plays 1B" modal when no catcher is on the field
     pendingConfirm: null,   // {type, id} for inline two-tap confirmations
   },
 };
@@ -1637,12 +1701,73 @@ function pickNextPitcherByNumber(lineup, lastPitcherNumber, alreadyPitchedThisGa
   return next ? next.id : null;
 }
 
+// Make sure can-catch players are spread across BOTH the infield and outfield
+// groups (when there are at least two of them). Because infield and outfield
+// swap sides every inning, this guarantees there's always a catcher on the
+// infield side — and therefore always one available to play 1B. Mutates the
+// passed arrays in place.
+function balanceCatchers(infieldIds, outfieldIds, canCatchSet) {
+  if (!canCatchSet || canCatchSet.size === 0) return;
+  const inCatchers = infieldIds.filter(id => canCatchSet.has(id)).length;
+  const outCatchers = outfieldIds.filter(id => canCatchSet.has(id)).length;
+  if (inCatchers + outCatchers < 2) return; // need at least 2 to cover both sides
+
+  if (inCatchers === 0) {
+    // Swap an infield non-catcher for an outfield catcher
+    const inNon = infieldIds.findIndex(id => !canCatchSet.has(id));
+    const outCatch = outfieldIds.findIndex(id => canCatchSet.has(id));
+    if (inNon >= 0 && outCatch >= 0) {
+      [infieldIds[inNon], outfieldIds[outCatch]] = [outfieldIds[outCatch], infieldIds[inNon]];
+    }
+  } else if (outCatchers === 0) {
+    // Swap an outfield non-catcher for an infield catcher
+    const outNon = outfieldIds.findIndex(id => !canCatchSet.has(id));
+    const inCatch = infieldIds.findIndex(id => canCatchSet.has(id));
+    if (outNon >= 0 && inCatch >= 0) {
+      [outfieldIds[outNon], infieldIds[inCatch]] = [infieldIds[inCatch], outfieldIds[outNon]];
+    }
+  }
+}
+
 // Split field players into infield/outfield for strict mode: up to 5 infield, up to 4 outfield.
 function splitFieldStrict(fieldIds) {
   const maxIF = 5, maxOF = 4;
   const infieldIds = fieldIds.slice(0, Math.min(fieldIds.length, maxIF));
   const outfieldIds = fieldIds.slice(maxIF, maxIF + maxOF);
   return { infieldIds, outfieldIds };
+}
+
+// Ensure a "can catch" player is on 1st base for this inning's assignments.
+// The "pitcher" is really just the center position, so a can-catch pitcher is a
+// valid candidate to move to 1B too.
+// Strategy:
+//  1. If whoever is already on 1B can catch, nothing to do.
+//  2. Swap any can-catch player who is ON THE FIELD (including the center/pitcher
+//     spot) onto 1B; the old 1B kid takes that player's vacated spot.
+// Bench players are NEVER pulled in — if it's a kid's turn to sit, they sit.
+// Returns true if a can-catch player ended up on 1B, false if none were on the
+// field (caller should then ask the coach who to put at 1B). Mutates `inning`.
+function enforceCatcherOn1B(inning, lineup) {
+  if (!inning || !inning.assignments) return false;
+  const canCatchIds = new Set(lineup.filter(p => p.canCatch).map(p => p.id));
+  if (canCatchIds.size === 0) return false;
+
+  const entries = inning.assignments;
+  const current1B = Object.keys(entries).find(id => entries[id] === '1B');
+  if (current1B && canCatchIds.has(current1B)) return true; // already satisfied
+
+  // Any can-catch player on the field qualifies — including the center/pitcher.
+  const fieldCatcher = Object.keys(entries).find(id => canCatchIds.has(id));
+  if (fieldCatcher) {
+    const oldPos = entries[fieldCatcher];
+    entries[fieldCatcher] = '1B';
+    if (current1B) entries[current1B] = oldPos; // give them the catcher's old spot
+    return true;
+  }
+
+  // No catcher on the field (all catchers are benched). Don't disturb the bench
+  // rotation — signal the caller to ask the coach who should play 1B.
+  return false;
 }
 
 // Build inning 1 from scratch. Pitcher is picked by jersey-number rotation
@@ -1652,6 +1777,7 @@ function splitFieldStrict(fieldIds) {
 function generateInitialFielding(lineup, lastPitcherNumber, everyoneFields = true) {
   if (!lineup || lineup.length === 0) return null;
   const playerIds = lineup.map(p => p.id);
+  const canCatchSet = new Set(lineup.filter(p => p.canCatch).map(p => p.id));
   const pitcherId = pickNextPitcherByNumber(lineup, lastPitcherNumber, new Set());
   const nonPitcherIds = shuffle(playerIds.filter(id => id !== pitcherId));
 
@@ -1660,6 +1786,8 @@ function generateInitialFielding(lineup, lastPitcherNumber, everyoneFields = tru
     const infieldCount = Math.ceil(nonPitcherIds.length / 2);
     const infieldIds = nonPitcherIds.slice(0, infieldCount);
     const outfieldIds = nonPitcherIds.slice(infieldCount);
+    // Spread catchers across both sides so one is always available after swaps
+    balanceCatchers(infieldIds, outfieldIds, canCatchSet);
     const inning = buildInningAssignments(infieldIds, outfieldIds, pitcherId);
     return { pitchedIds: [pitcherId], innings: [inning] };
   }
@@ -1670,6 +1798,8 @@ function generateInitialFielding(lineup, lastPitcherNumber, everyoneFields = tru
   const benchIds = nonPitcherIds.slice(0, B);
   const fieldIds = nonPitcherIds.slice(B);
   const { infieldIds, outfieldIds } = splitFieldStrict(fieldIds);
+  // Spread catchers across both sides so one is always available after swaps
+  balanceCatchers(infieldIds, outfieldIds, canCatchSet);
   const inning = { ...buildInningAssignments(infieldIds, outfieldIds, pitcherId), benchIds };
   // benchQueue: field players first (most due for bench next), then bench (just sat), then pitcher last
   const benchQueue = [...fieldIds, ...benchIds, pitcherId];
@@ -1768,11 +1898,67 @@ function ensureFieldingForInning(game, inningIdx) {
   const ef = game.everyoneFields !== false; // default true
   if (!game.fielding) {
     game.fielding = generateInitialFielding(game.lineup, game.startingPitcherNumber, ef);
+    applyCatcherPrefToInning(game, 0);
   }
   while (game.fielding.innings.length <= inningIdx) {
     game.fielding = generateNextInning(game.fielding, game.lineup, ef);
+    applyCatcherPrefToInning(game, game.fielding.innings.length - 1);
   }
   return game.fielding.innings[inningIdx];
+}
+
+// Apply the game's running "catcher on 1B" preference to a freshly generated
+// inning. New innings inherit the last choice the coach made, but the coach can
+// still flip it per-inning from the fielding card.
+function applyCatcherPrefToInning(game, idx) {
+  if (!game.fielding || !game.fielding.innings[idx]) return;
+  const inning = game.fielding.innings[idx];
+  if (inning.catcherOn1B === undefined) inning.catcherOn1B = !!game.catcherOn1B;
+  if (inning.catcherOn1B) enforceCatcherOn1B(inning, game.lineup);
+}
+
+// Toggle whether a "can catch" player is placed at 1B for the current inning.
+// Remembers the choice as the default for upcoming innings too.
+function setCatcherOn1B(on) {
+  if (!state.game || !state.game.fielding) return;
+  state.game.catcherOn1B = on;
+  const idx = state.game.inning - 1;
+  const inning = state.game.fielding.innings[idx];
+  if (inning) {
+    inning.catcherOn1B = on;
+    // If turning it on but no catcher is on the field, ask the coach who plays 1B
+    if (on && !enforceCatcherOn1B(inning, state.game.lineup)) {
+      state.ui.catcherPickFor1B = true;
+    }
+  }
+  saveGame();
+  render();
+}
+
+// Coach manually picks who plays 1st base (from the "no catchers on field" modal).
+// If the chosen kid is on the field, swap them with the current 1B kid. If they're
+// on the bench, bring them in and bench the kid who was at 1B.
+function assignCatcherTo1B(playerId) {
+  state.ui.catcherPickFor1B = false;
+  if (!state.game || !state.game.fielding || !playerId) { render(); return; }
+  const idx = state.game.inning - 1;
+  const inning = state.game.fielding.innings[idx];
+  if (!inning) { render(); return; }
+  const entries = inning.assignments;
+  const current1B = Object.keys(entries).find(id => entries[id] === '1B');
+  if (entries[playerId] !== undefined) {
+    // Already on the field — swap positions with the current 1B kid
+    const oldPos = entries[playerId];
+    entries[playerId] = '1B';
+    if (current1B && current1B !== playerId) entries[current1B] = oldPos;
+  } else if (inning.benchIds && inning.benchIds.includes(playerId)) {
+    // Coming off the bench — bench the kid who was at 1B in their place
+    entries[playerId] = '1B';
+    inning.benchIds = inning.benchIds.filter(id => id !== playerId);
+    if (current1B) { delete entries[current1B]; inning.benchIds.push(current1B); }
+  }
+  saveGame();
+  render();
 }
 
 
@@ -1827,6 +2013,21 @@ async function addPlayerToTeam(teamId, name, number) {
   }
   render();
 }
+// Toggle a player's "can catch" flag. Can-catch players can be placed at 1st base
+// when the coach asks for a catcher there during a fielding inning.
+async function toggleCanCatch(teamId, playerId) {
+  if (!teamId || !playerId) return;
+  if (teamId === state.activeTeamId) {
+    const p = state.roster.find(x => x.id === playerId);
+    if (p) { p.canCatch = !p.canCatch; await saveRoster(); }
+  } else {
+    const roster = getTeamRosterSync(teamId).map(p =>
+      p.id === playerId ? { ...p, canCatch: !p.canCatch } : p
+    );
+    await safeSet(STORAGE_KEYS.rosterPrefix + teamId, roster);
+  }
+  render();
+}
 async function removePlayerFromTeam(teamId, playerId) {
   if (!teamId || !playerId) return;
   if (teamId === state.activeTeamId) {
@@ -1841,7 +2042,7 @@ async function removePlayerFromTeam(teamId, playerId) {
 function generateLineup() {
   const present = state.roster.filter(p => p.attending);
   if (present.length === 0) return;
-  const order = shuffle(present).map(p => ({ id: p.id, name: p.name, number: p.number }));
+  const order = shuffle(present).map(p => ({ id: p.id, name: p.name, number: p.number, canCatch: !!p.canCatch }));
   const sched = state.ui.pendingScheduleStart;
   // Pull the team's last-pitcher number so the rotation continues across games
   const team = getActiveTeam();
@@ -1860,6 +2061,7 @@ function generateLineup() {
     fielding: null,
     startingPitcherNumber, // tracks the cross-game pitcher rotation seed
     everyoneFields: state.ui.everyoneFields !== false,
+    catcherOn1B: false, // when true, a "can catch" player is placed at 1B each inning
   };
   ensureFieldingForInning(state.game, 0);
   saveGame();
@@ -1946,7 +2148,7 @@ function addLateArrival(rosterId) {
   player.attending = true;
   saveRoster();
   // Append to bottom of batting order
-  state.game.lineup.push({ id: player.id, name: player.name, number: player.number });
+  state.game.lineup.push({ id: player.id, name: player.name, number: player.number, canCatch: !!player.canCatch });
 
   // Slot them into the CURRENT inning's field assignments
   const inningIdx = state.game.inning - 1;
@@ -1993,6 +2195,9 @@ function addLateArrival(rosterId) {
     inning.assignments[player.id] = shuffle(positions)[0];
   }
 
+  // Keep a catcher on 1B if the coach asked for one this inning
+  if (inning.catcherOn1B) enforceCatcherOn1B(inning, state.game.lineup);
+
   // Drop any pre-generated future innings since the player set changed —
   // next inning will be re-derived correctly from the updated current inning.
   if (state.game.fielding.innings.length > state.game.inning) {
@@ -2030,6 +2235,13 @@ function nextHalf() {
     g.half = 'top';
     g.inning++;
     ensureFieldingForInning(g, g.inning - 1);
+    // If the coach wants a catcher on 1B but none is on the field, ask who plays 1B
+    if (g.catcherOn1B) {
+      const inning = g.fielding.innings[g.inning - 1];
+      if (inning && !enforceCatcherOn1B(inning, g.lineup)) {
+        state.ui.catcherPickFor1B = true;
+      }
+    }
   }
   saveGame();
   render();
@@ -2057,6 +2269,9 @@ function reshuffleCurrentInningFielding() {
   const newInning = buildInningAssignments(infieldIds, outfieldIds, inning.pitcherId);
   // Preserve bench players in strict mode
   if (inning.benchIds) newInning.benchIds = inning.benchIds;
+  // Preserve the catcher-on-1B choice and re-apply it after the shuffle
+  newInning.catcherOn1B = inning.catcherOn1B;
+  if (inning.catcherOn1B) enforceCatcherOn1B(newInning, state.game.lineup);
   state.game.fielding.innings[inningIdx] = newInning;
   // Drop pre-generated future innings since this inning's layout shifted
   state.game.fielding.innings = state.game.fielding.innings.slice(0, inningIdx + 1);
@@ -2291,13 +2506,14 @@ function viewTeamManage() {
                     <input class="input" id="edit-roster-input-${team.id}" placeholder="Player name…" style="flex:1;" />
                     <button class="btn btn-primary btn-small" data-action="add-team-player" data-id="${team.id}">ADD</button>
                   </div>
-                  <p style="font-size:11px;color:var(--gray);margin:0 0 10px;">Jersey number required.</p>
+                  <p style="font-size:11px;color:var(--gray);margin:0 0 10px;">Jersey number required. Tap ⚾ to mark a player who can catch (play 1st base).</p>
                   ${rosterCount > 0 ? `
                     <ul class="player-list">
                       ${teamRoster.slice().sort((a,b) => (parseInt(a.number,10)||999) - (parseInt(b.number,10)||999)).map(p => `
                         <li class="player-row">
                           <span class="player-jersey">${p.number != null && p.number !== '' ? '#' + escape(String(p.number)) : '—'}</span>
-                          <span class="player-name">${escape(p.name)}</span>
+                          <span class="player-name">${escape(p.name)}${p.canCatch ? ' <span class="catch-ball" title="Can catch">⚾</span>' : ''}</span>
+                          <button class="catch-toggle ${p.canCatch ? 'on' : ''}" data-action="toggle-can-catch" data-team-id="${team.id}" data-id="${p.id}" title="${p.canCatch ? 'Can catch — tap to unset' : 'Mark as can catch'}">⚾</button>
                           <button class="player-remove" data-action="remove-team-player" data-team-id="${team.id}" data-id="${p.id}">REMOVE</button>
                         </li>
                       `).join('')}
@@ -2560,6 +2776,7 @@ function viewLineup() {
         <button class="btn btn-primary" data-action="start-game">▶ START GAME</button>
       </div>
     </div>
+    ${renderCatcherPickModal()}
   `;
 }
 
@@ -2571,6 +2788,7 @@ function renderFieldingForCurrentInning(game) {
   const prevInning = inningIdx > 0 ? game.fielding.innings[inningIdx - 1] : null;
   const nameById = Object.fromEntries(game.lineup.map(p => [p.id, p.name]));
   const numById = Object.fromEntries(game.lineup.map(p => [p.id, p.number]));
+  const canCatchById = Object.fromEntries(game.lineup.map(p => [p.id, !!p.canCatch]));
 
   // Group rendering: pitcher → infield → outfield → bench
   const pitcherEntry = inning.pitcherId
@@ -2611,14 +2829,28 @@ function renderFieldingForCurrentInning(game) {
     return `
       <li class="field-row ${entry.kind}">
         <div class="field-pos">${entry.position}</div>
-        <div class="field-name">${numById[entry.id] != null && numById[entry.id] !== '' ? `<span style="color:var(--gold-deep);font-family:'Bebas Neue';margin-right:6px;">#${escape(String(numById[entry.id]))}</span>` : ''}${escape(nameById[entry.id] || '?')}</div>
+        <div class="field-name">${numById[entry.id] != null && numById[entry.id] !== '' ? `<span style="color:var(--gold-deep);font-family:'Bebas Neue';margin-right:6px;">#${escape(String(numById[entry.id]))}</span>` : ''}${escape(nameById[entry.id] || '?')}${canCatchById[entry.id] ? ' <span class="catch-ball" title="Can catch">⚾</span>' : ''}</div>
         ${wasLabel}
       </li>
     `;
   }
 
   const hasBench = benchEntries.length > 0;
+  const hasCatchers = game.lineup.some(p => p.canCatch);
+  const catcherOn = !!inning.catcherOn1B;
   return `
+    ${hasCatchers ? `
+      <div class="catcher-row">
+        <div class="catcher-row-text">
+          <div class="catcher-row-title">⚾ Catcher on 1st base?</div>
+          <div class="catcher-row-sub">Put a kid who can catch at 1B this inning.</div>
+        </div>
+        <div class="catcher-toggle-group">
+          <button class="catcher-mini ${catcherOn ? 'active' : ''}" data-action="catcher-1b-on">YES</button>
+          <button class="catcher-mini ${!catcherOn ? 'active' : ''}" data-action="catcher-1b-off">NO</button>
+        </div>
+      </div>
+    ` : ''}
     ${pitcherEntry.length ? `
       <div class="field-section-title">PITCHER</div>
       <ul class="field-list">${pitcherEntry.map(rowFor).join('')}</ul>
@@ -2644,6 +2876,40 @@ function renderFieldingForCurrentInning(game) {
         ${hasBench ? 'Bench rotates each inning — different kids sit each time.' : 'Inning 1 is randomized. Next inning, infielders move to outfield and vice versa.'}
       </p>
     `}
+  `;
+}
+
+// Modal shown when the coach asked for a catcher on 1B but none is on the field.
+// Lists everyone in the game (field + bench) so the coach can pick who plays 1B.
+function renderCatcherPickModal() {
+  if (!state.ui.catcherPickFor1B || !state.game || !state.game.fielding) return '';
+  const idx = state.game.inning - 1;
+  const inning = state.game.fielding.innings[idx];
+  if (!inning) return '';
+  const nameById = Object.fromEntries(state.game.lineup.map(p => [p.id, p.name]));
+  const numById = Object.fromEntries(state.game.lineup.map(p => [p.id, p.number]));
+  const canCatchById = Object.fromEntries(state.game.lineup.map(p => [p.id, !!p.canCatch]));
+
+  const fieldList = Object.keys(inning.assignments).map(id => ({ id, role: inning.assignments[id] === 'P' ? 'CENTER' : inning.assignments[id] }));
+  const benchList = (inning.benchIds || []).map(id => ({ id, role: 'BENCH' }));
+  const all = [...fieldList, ...benchList];
+
+  return `
+    <div class="modal-backdrop" data-action="close-catcher-pick">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-title">No catchers on the field</div>
+        <p style="font-size:13px;color:var(--gray);margin-bottom:14px;line-height:1.4;">None of the kids who can catch are in the field this inning. Pick who should play 1st base.</p>
+        <ul class="late-list" style="max-height:50vh;">
+          ${all.map(e => `
+            <li class="late-item" data-action="pick-1b" data-id="${e.id}">
+              <div class="late-item-name">${numById[e.id] != null && numById[e.id] !== '' ? `<span style="color:var(--gold-deep);font-family:'Bebas Neue';margin-right:6px;">#${escape(String(numById[e.id]))}</span>` : ''}${escape(nameById[e.id] || '?')}${canCatchById[e.id] ? ' <span class="catch-ball" title="Can catch">⚾</span>' : ''}</div>
+              <div class="late-item-add">${e.role}</div>
+            </li>
+          `).join('')}
+        </ul>
+        <button class="btn btn-ghost btn-small" data-action="close-catcher-pick" style="width:100%;">CANCEL</button>
+      </div>
+    </div>
   `;
 }
 
@@ -2778,6 +3044,7 @@ function viewGame() {
         </div>
       `}
     </div>
+    ${renderCatcherPickModal()}
   `;
 }
 
@@ -3059,6 +3326,17 @@ function handleAction(action, el, e) {
     setHomeAway(false);
   } else if (action === 'reshuffle-fielding') {
     reshuffleCurrentInningFielding();
+  } else if (action === 'toggle-can-catch') {
+    toggleCanCatch(el.getAttribute('data-team-id'), el.getAttribute('data-id'));
+  } else if (action === 'catcher-1b-on') {
+    setCatcherOn1B(true);
+  } else if (action === 'catcher-1b-off') {
+    setCatcherOn1B(false);
+  } else if (action === 'pick-1b') {
+    assignCatcherTo1B(el.getAttribute('data-id'));
+  } else if (action === 'close-catcher-pick') {
+    state.ui.catcherPickFor1B = false;
+    render();
   } else if (action === 'end-game') {
     endGame();
   } else if (action === 'cancel-end-game') {
